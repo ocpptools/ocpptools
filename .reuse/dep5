@@ -1,0 +1,8 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: OCPP Tools
+Upstream-Contact: https://github.com/ocpptools/ocpptools
+Source: https://github.com/ocpptools/ocpptools
+
+Files: .gitattributes .editorconfig .gitignore .reuse/dep5 AGENTS.md CITATION.cff CODE_OF_CONDUCT.md CONTRIBUTING.md GOVERNANCE.md LICENSE MAINTAINERS.md NOTICE README.md ROADMAP.md SECURITY.md SUPPORT.md TRADEMARKS.md docs/BRANCHING.md
+Copyright: 2026 Rodolfo Carrillo
+License: Apache-2.0

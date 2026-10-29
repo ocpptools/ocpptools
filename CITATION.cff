@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+title: OCPP Tools
+message: If you use this software, please cite it using these metadata.
+type: software
+authors:
+  - given-names: Rodolfo
+    family-names: Carrillo
+repository-code: https://github.com/ocpptools/ocpptools
+license: Apache-2.0
