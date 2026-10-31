@@ -13,5 +13,8 @@ export type {
 	OcppFrame,
 } from './frame.js';
 export type { JsonObject, JsonPrimitive, JsonValue } from './json.js';
+export { parseFrame } from './parse.js';
+export type { ParseFrameError, ParseFrameErrorKind } from './parse.js';
+export type { Result } from './result.js';
 export { OCPP_SUBPROTOCOLS, OCPP_VERSIONS } from './version.js';
 export type { OcppSubprotocol, OcppVersion } from './version.js';
