@@ -45,7 +45,8 @@ order before opening a pull request:
 3. `pnpm typecheck` and `pnpm typecheck:test`
 4. `pnpm test:coverage`
 5. `pnpm build`
-6. `pnpm lint:packages` (`publint`, `attw`) and `pnpm size`
+6. `pnpm lint:packages` (`publint`, `attw`), `pnpm test:pack` (installs the
+   packed tarball in a throwaway project), and `pnpm size`
 7. `pnpm lint:ai-files` and `pnpm lint:licenses`
 
 ## Package boundaries
