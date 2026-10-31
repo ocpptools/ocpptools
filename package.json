@@ -46,7 +46,7 @@
     "@vitest/coverage-v8": "^4.1.12",
     "eslint": "^9",
     "eslint-config-prettier": "^10",
-    "globals": "^16",
+    "globals": "^17",
     "prettier": "^3",
     "publint": "^0.3",
     "size-limit": "^11.2.0",
