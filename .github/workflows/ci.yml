@@ -38,6 +38,7 @@ jobs:
       - run: pnpm test:coverage
       - run: pnpm build
       - run: pnpm lint:packages
+      - run: pnpm test:pack
       - run: pnpm size
 
   reuse:

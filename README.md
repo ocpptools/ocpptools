@@ -5,8 +5,8 @@ frame parsing, schema-driven validation, headless charging-station simulation,
 and message construction for OCPP 1.6J and 2.0.1.
 
 > **Status:** pre-alpha. The repository foundation is in place and
-> `@ocpptools/core` is a skeleton: nothing is published yet and APIs are
-> unstable until 1.0.0.
+> `@ocpptools/core` is feature-complete for its first release but not published
+> yet. APIs are unstable until 1.0.0.
 
 ## What this repository is
 
@@ -23,14 +23,14 @@ and message construction for OCPP 1.6J and 2.0.1.
 
 ## Packages
 
-| Package                   | Status   | Purpose                                                        |
-| ------------------------- | -------- | -------------------------------------------------------------- |
-| `@ocpptools/core`         | Skeleton | OCPP types, frames, parser/serializer, transport interfaces    |
-| `@ocpptools/schema-utils` | Planned  | JSON Schema normalization and field metadata                   |
-| `@ocpptools/validator`    | Planned  | Ajv-based validation with an injectable schema registry        |
-| `@ocpptools/simulator`    | Planned  | Headless charging-station simulator with injectable transports |
-| `@ocpptools/builder`      | Planned  | Headless payload and frame construction                        |
-| `@ocpptools/schemas`      | Blocked  | OCPP schemas; pending license review                           |
+| Package                   | Status     | Purpose                                                        |
+| ------------------------- | ---------- | -------------------------------------------------------------- |
+| `@ocpptools/core`         | Unreleased | OCPP types, frames, parser/serializer, transport interfaces    |
+| `@ocpptools/schema-utils` | Planned    | JSON Schema normalization and field metadata                   |
+| `@ocpptools/validator`    | Planned    | Ajv-based validation with an injectable schema registry        |
+| `@ocpptools/simulator`    | Planned    | Headless charging-station simulator with injectable transports |
+| `@ocpptools/builder`      | Planned    | Headless payload and frame construction                        |
+| `@ocpptools/schemas`      | Blocked    | OCPP schemas; pending license review                           |
 
 The build order is `core` → `schema-utils` / schemas decision → `validator` →
 `simulator` → `builder`. Optional packages such as `@ocpptools/testing`,
