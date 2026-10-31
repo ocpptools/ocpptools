@@ -13,8 +13,12 @@ export type {
 	OcppFrame,
 } from './frame.js';
 export type { JsonObject, JsonPrimitive, JsonValue } from './json.js';
+export { createMessageIdGenerator } from './message-id.js';
+export type { MessageIdGenerator, RandomUuidSource } from './message-id.js';
 export { parseFrame } from './parse.js';
 export type { ParseFrameError, ParseFrameErrorKind } from './parse.js';
 export type { Result } from './result.js';
+export { serializeFrame } from './serialize.js';
+export type { SerializeFrameError, SerializeFrameErrorKind } from './serialize.js';
 export { OCPP_SUBPROTOCOLS, OCPP_VERSIONS } from './version.js';
 export type { OcppSubprotocol, OcppVersion } from './version.js';
