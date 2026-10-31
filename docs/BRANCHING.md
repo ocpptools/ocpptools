@@ -95,6 +95,13 @@ names reported to GitHub:
 fails, so adding or renaming jobs inside `ci.yml` does not change branch
 protection.
 
+If `DCO` fails, add the sign-off to the offending commits and update the
+branch. For the latest commit, run `git commit --amend -s --no-edit`. For
+several commits, run `git rebase --signoff main` and push with
+`git push --force-with-lease` (own pull request branches only). Squash merges
+keep the sign-off lines because the squash message is built from the commit
+messages.
+
 ## Releases
 
 `main` is the release line. Routine releases do not use release branches.
