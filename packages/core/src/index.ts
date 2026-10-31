@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Rodolfo Carrillo
 
+export { OCPP_ERROR_CODES, isErrorCode } from './error-codes.js';
+export type { OcppErrorCode } from './error-codes.js';
 export { MESSAGE_TYPE, isCall, isCallError, isCallResult } from './frame.js';
 export type {
 	CallErrorFrame,
