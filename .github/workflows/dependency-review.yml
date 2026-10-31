@@ -17,3 +17,9 @@ jobs:
       - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: moderate
+          # minimatch < 11.0.1 (DoS via globparts amplification). The fix exists
+          # only in 11.x and no ESLint, typescript-eslint, or TypeDoc release
+          # depends on it yet. Dev tooling only; never published and it only
+          # processes this repository's own glob patterns.
+          # Remove once eslint, typescript-eslint, and typedoc require minimatch ^11.
+          allow-ghsas: GHSA-g3hv-75wg-m249
