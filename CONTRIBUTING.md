@@ -1,14 +1,21 @@
 # Contributing
 
-Thank you for your interest in OCPP Tools. This repository is still in the
-foundation phase. Until the root package manifest exists, there are no build or
-test scripts. Once the workspace is scaffolded, the root `package.json` is the
+Thank you for your interest in OCPP Tools. The root `package.json` is the
 source of truth for commands.
 
 ## Prerequisites
 
 - Node.js 22.12 or newer.
 - pnpm, using the version pinned in the root `packageManager` field.
+- [REUSE](https://reuse.software/) (`pipx install "reuse[charset-normalizer]"`),
+  only needed to run the license check locally.
+
+## Setup
+
+```bash
+pnpm install
+pnpm verify
+```
 
 ## Workflow
 
@@ -30,14 +37,16 @@ short.
 
 ## Verification order
 
-When the scripts exist, run them in this order before opening a pull request:
+`pnpm verify` runs the full chain. To run the steps one by one, use this
+order before opening a pull request:
 
-1. Lint.
-2. Format check.
-3. Typecheck.
-4. Tests.
-5. Build.
-6. Package checks (`publint`, `attw`).
+1. `pnpm lint`
+2. `pnpm format:check`
+3. `pnpm typecheck` and `pnpm typecheck:test`
+4. `pnpm test:coverage`
+5. `pnpm build`
+6. `pnpm lint:packages` (`publint`, `attw`) and `pnpm size`
+7. `pnpm lint:ai-files` and `pnpm lint:licenses`
 
 ## Package boundaries
 
@@ -66,6 +75,9 @@ Keep exported API boundaries on `unknown`, not `any`.
 - Code and documentation are Apache-2.0.
 - Contributions are inbound = outbound under Apache-2.0 with DCO sign-off.
 - Do not add OCPP JSON Schemas unless their license permits redistribution.
+- Do not commit AI-assistant files (instructions, rules, prompts, memory, or
+  local settings, including `AGENTS.md`). They are ignored by Git and
+  `pnpm lint:ai-files` fails CI if any is tracked.
 - Do not add website content, SEO pages, ads, analytics, deployment
   configuration, private assets, or the private website’s name or URL.
 - Public documentation is written in English.

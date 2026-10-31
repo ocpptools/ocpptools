@@ -79,19 +79,21 @@ Every pull request needs:
 
 ## Required checks
 
-The following checks must pass before merge:
+The following status checks must pass before merge. Names are the exact job
+names reported to GitHub:
 
-- Lint.
-- Format check.
-- Typecheck.
-- Tests.
-- Build.
-- Package checks (`publint`, `attw`).
-- CodeQL.
-- Dependency review.
-- DCO.
+| Check                             | Workflow                | Covers                                                                                                                                      |
+| --------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CI OK`                           | `ci.yml`                | Aggregates lint, format, typecheck, tests, build, package checks (`publint`, `attw`), size, REUSE, and the AI-files guard on Node 22 and 24 |
+| `Analyze (javascript-typescript)` | `codeql.yml`            | CodeQL for source code                                                                                                                      |
+| `Analyze (actions)`               | `codeql.yml`            | CodeQL for workflows                                                                                                                        |
+| `Dependency Review`               | `dependency-review.yml` | Vulnerable or newly added dependencies                                                                                                      |
+| `DCO`                             | `dco.yml`               | `Signed-off-by` on every commit                                                                                                             |
+| `Conventional Commits title`      | `pr-title.yml`          | Pull request title format                                                                                                                   |
 
-When CI exists, update this section with the exact workflow and job names.
+`CI OK` is the only CI job required directly. It fails if any job it depends on
+fails, so adding or renaming jobs inside `ci.yml` does not change branch
+protection.
 
 ## Releases
 

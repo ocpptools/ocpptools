@@ -97,6 +97,10 @@ temp/
 *.zip
 .release/
 
+# Copied into packages at pack time by scripts/sync-license.mjs.
+packages/*/LICENSE
+packages/*/NOTICE
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Generated documentation
 # ─────────────────────────────────────────────────────────────────────────────
@@ -106,14 +110,25 @@ typedoc/
 # ─────────────────────────────────────────────────────────────────────────────
 # AI agents and local assistant state
 #
-# Repository-wide guidance such as AGENTS.md is tracked intentionally.
-# Ignore only per-developer agent state, local overrides, and tool caches.
+# No AI-assistant file is ever versioned: instructions, rules, prompts, memory,
+# local settings, caches, or generated knowledge graphs. This includes
+# AGENTS.md. `pnpm lint:ai-files` fails CI if any of these is tracked, even if
+# it was added with `git add -f`.
 # ─────────────────────────────────────────────────────────────────────────────
+AGENTS.md
+AGENTS.local.md
+AGENT.md
+CLAUDE.md
+CLAUDE.local.md
+GEMINI.md
+GEMINI.local.md
+QWEN.md
 .claude/
 .claude-flow/
 .cursor/
 .cursorrules
 .windsurf/
+.windsurfrules
 .continue/
 .aider*
 .codex/
@@ -121,14 +136,30 @@ typedoc/
 .robot/
 .openhands/
 .agents/
-AGENTS.md
-AGENTS.local.md
-CLAUDE.md
-CLAUDE.local.md
-GEMINI.md
-GEMINI.local.md
+.opencode/
+opencode.json
+.kiro/
+.roo/
+.roorules
+.roomodes
+.clinerules
+.cline/
+.augment/
+.amazonq/
+.junie/
+.trae/
+.copilot/
+.caveman/
+.goosehints
+.github/copilot-instructions.md
 .github/copilot-instructions.local.md
+.github/instructions/
+.github/prompts/
+.github/agents/
+.github/chatmodes/
 .mcp.json
 .mcp.local.json
 *.prompt.md
 .prompts/
+graphify-out/
+.graphify*

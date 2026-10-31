@@ -4,9 +4,9 @@ Open-source TypeScript libraries for the Open Charge Point Protocol (OCPP):
 frame parsing, schema-driven validation, headless charging-station simulation,
 and message construction for OCPP 1.6J and 2.0.1.
 
-> **Status:** foundation phase. The first package, `@ocpptools/core`, is being
-> extracted and stabilized before its first public release. APIs are unstable
-> until 1.0.0.
+> **Status:** pre-alpha. The repository foundation is in place and
+> `@ocpptools/core` is a skeleton: nothing is published yet and APIs are
+> unstable until 1.0.0.
 
 ## What this repository is
 
@@ -23,18 +23,29 @@ and message construction for OCPP 1.6J and 2.0.1.
 
 ## Packages
 
-| Package | Status | Purpose |
-|---|---|---|
-| `@ocpptools/core` | In progress | OCPP types, frames, parser/serializer, transport interfaces |
-| `@ocpptools/schema-utils` | Planned | JSON Schema normalization and field metadata |
-| `@ocpptools/validator` | Planned | Ajv-based validation with an injectable schema registry |
-| `@ocpptools/simulator` | Planned | Headless charging-station simulator with injectable transports |
-| `@ocpptools/builder` | Planned | Headless payload and frame construction |
-| `@ocpptools/schemas` | Blocked | OCPP schemas; pending license review |
+| Package                   | Status   | Purpose                                                        |
+| ------------------------- | -------- | -------------------------------------------------------------- |
+| `@ocpptools/core`         | Skeleton | OCPP types, frames, parser/serializer, transport interfaces    |
+| `@ocpptools/schema-utils` | Planned  | JSON Schema normalization and field metadata                   |
+| `@ocpptools/validator`    | Planned  | Ajv-based validation with an injectable schema registry        |
+| `@ocpptools/simulator`    | Planned  | Headless charging-station simulator with injectable transports |
+| `@ocpptools/builder`      | Planned  | Headless payload and frame construction                        |
+| `@ocpptools/schemas`      | Blocked  | OCPP schemas; pending license review                           |
 
 The build order is `core` → `schema-utils` / schemas decision → `validator` →
 `simulator` → `builder`. Optional packages such as `@ocpptools/testing`,
 `@ocpptools/kit`, and the `ocpptools` CLI come later.
+
+## Development
+
+Requires Node.js 22.12+ and the pnpm version pinned in `package.json`.
+
+```bash
+pnpm install
+pnpm verify
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the individual steps.
 
 ## Principles
 
