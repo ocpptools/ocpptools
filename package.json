@@ -1,0 +1,58 @@
+{
+  "name": "ocpptools",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Open-source TypeScript libraries for OCPP 1.6J and 2.0.1.",
+  "license": "Apache-2.0",
+  "author": "Rodolfo Carrillo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ocpptools/ocpptools.git"
+  },
+  "bugs": "https://github.com/ocpptools/ocpptools/issues",
+  "homepage": "https://github.com/ocpptools/ocpptools",
+  "packageManager": "pnpm@11.6.0",
+  "engines": {
+    "node": ">=22.12.0",
+    "pnpm": ">=11"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "clean": "tsc -b --clean tsconfig.json",
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc -b --pretty false tsconfig.json",
+    "typecheck:test": "pnpm -r --filter @ocpptools/* --if-present run typecheck:test",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "pnpm build && changeset publish",
+    "lint:packages": "pnpm -r --filter @ocpptools/* --if-present run lint:package",
+    "lint:ai-files": "node scripts/check-no-ai-files.mjs",
+    "lint:licenses": "reuse lint",
+    "verify": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm typecheck:test && pnpm test:coverage && pnpm build && pnpm lint:packages && pnpm size && pnpm lint:ai-files && pnpm lint:licenses",
+    "docs:api": "typedoc",
+    "size": "pnpm -r --filter @ocpptools/* --if-present run size"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18",
+    "@changesets/cli": "^2",
+    "@eslint/js": "^9",
+    "@size-limit/file": "^11.2.0",
+    "@types/node": "^22",
+    "@vitest/coverage-v8": "^4.1.12",
+    "eslint": "^9",
+    "eslint-config-prettier": "^10",
+    "globals": "^16",
+    "prettier": "^3",
+    "publint": "^0.3",
+    "size-limit": "^11.2.0",
+    "typedoc": "^0.28.20",
+    "typescript": "^5",
+    "typescript-eslint": "^8",
+    "vitest": "^4.1.12"
+  }
+}

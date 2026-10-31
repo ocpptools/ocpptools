@@ -35,7 +35,6 @@
 .reuse/dep5 text eol=lf
 LICENSE text eol=lf
 NOTICE text eol=lf
-AGENTS.md text eol=lf
 CODEOWNERS text eol=lf
 Dockerfile text eol=lf
 Makefile text eol=lf

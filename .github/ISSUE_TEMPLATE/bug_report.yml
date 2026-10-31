@@ -1,0 +1,54 @@
+name: Bug report
+description: Report incorrect behavior in a published package.
+labels: [bug, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Redact CSMS URLs, credentials, certificates, idTag values, and
+        production message IDs. Report vulnerabilities privately instead.
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package
+      options:
+        - '@ocpptools/core'
+        - '@ocpptools/schema-utils'
+        - '@ocpptools/validator'
+        - '@ocpptools/simulator'
+        - '@ocpptools/builder'
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Package version
+    validations:
+      required: true
+  - type: dropdown
+    id: protocol
+    attributes:
+      label: OCPP version
+      options: ['1.6J', '2.0.1', Not applicable]
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: A minimal frame or payload that reproduces the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true

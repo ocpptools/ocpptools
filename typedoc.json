@@ -1,0 +1,12 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["packages/core/src/index.ts"],
+  "tsconfig": "packages/core/tsconfig.build.json",
+  "out": "docs/api",
+  "name": "OCPP Tools",
+  "readme": "README.md",
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "validation": { "notExported": true, "invalidLink": true },
+  "treatWarningsAsErrors": false
+}

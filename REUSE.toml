@@ -1,0 +1,29 @@
+version = 1
+SPDX-PackageName = "OCPP Tools"
+SPDX-PackageDownloadLocation = "https://github.com/ocpptools/ocpptools"
+
+# Source files (.ts, .mjs) carry inline SPDX headers. Everything below cannot
+# hold a header (JSON, lockfile, dotfiles) or is documentation.
+[[annotations]]
+path = [
+  "*.md",
+  "*.json",
+  "*.yaml",
+  "*.yml",
+  "*.cff",
+  ".*",
+  "LICENSE",
+  "NOTICE",
+  "REUSE.toml",
+  ".changeset/**",
+  ".github/**",
+  "docs/**",
+  "packages/**/*.json",
+  "packages/**/*.md",
+  "packages/**/dist/**",
+  "packages/*/LICENSE",
+  "packages/*/NOTICE",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Rodolfo Carrillo"
+SPDX-License-Identifier = "Apache-2.0"

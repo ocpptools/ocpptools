@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or idea
+    url: https://github.com/ocpptools/ocpptools/discussions
+    about: Ask questions and discuss ideas in GitHub Discussions.
+  - name: Report a vulnerability
+    url: https://github.com/ocpptools/ocpptools/security/advisories/new
+    about: Use private vulnerability reporting. Do not open a public issue.

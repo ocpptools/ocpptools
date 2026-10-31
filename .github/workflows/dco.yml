@@ -1,0 +1,36 @@
+name: DCO
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  dco:
+    name: DCO
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require Signed-off-by on every commit
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          failed=0
+          for sha in $(git rev-list --no-merges "$BASE_SHA..$HEAD_SHA"); do
+            author_name=$(git show -s --format=%an "$sha")
+            author_email=$(git show -s --format=%ae "$sha")
+            if [ "$author_email" = "49699333+dependabot[bot]@users.noreply.github.com" ]; then
+              continue
+            fi
+            if ! git show -s --format=%B "$sha" | grep -i '^Signed-off-by:' | grep -iqF "<$author_email>"; then
+              echo "::error::Commit $sha by $author_name <$author_email> lacks a matching Signed-off-by line. Use 'git commit -s'."
+              failed=1
+            fi
+          done
+          exit $failed

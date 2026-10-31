@@ -1,0 +1,13 @@
+{
+  "name": "@ocpptools/tsconfig",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    "./base.json": "./base.json",
+    "./library.json": "./library.json",
+    "./browser.json": "./browser.json",
+    "./node.json": "./node.json",
+    "./test.json": "./test.json"
+  }
+}
