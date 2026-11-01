@@ -63,6 +63,12 @@ importers:
         specifier: workspace:*
         version: link:../tsconfig
 
+  packages/schema-utils:
+    devDependencies:
+      '@ocpptools/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+
   packages/tsconfig: {}
 
 packages:
