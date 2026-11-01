@@ -1,6 +1,6 @@
 {
   "name": "@ocpptools/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "description": "OCPP 1.6J/2.0.1 types, frames, parser/serializer, and transport interfaces.",
   "license": "Apache-2.0",
