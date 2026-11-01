@@ -3,8 +3,7 @@
 OCPP-J frame types, a strict parser and serializer, per-version error codes,
 and the transport, clock, and storage interfaces for OCPP 1.6J and 2.0.1.
 
-> **Status:** pre-alpha. Nothing is published yet and the API can still change
-> before 0.1.0.
+> **Status:** alpha. The API can change in any minor release before 1.0.0.
 
 It has no runtime dependencies. It does not use the DOM or Node APIs, and it
 does not include OCPP JSON Schemas or validate payloads against them.
