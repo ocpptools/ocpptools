@@ -11,14 +11,19 @@ export type {
 	NormalizeWarningCode,
 	NormalizedSchema,
 } from './normalize.js';
+export { resolveRefs } from './resolve.js';
+export type { ResolveError, ResolveErrorKind, ResolveOptions } from './resolve.js';
 export type {
 	JsonObject,
 	JsonPrimitive,
 	JsonSchema,
+	JsonSchemaKeywords,
 	JsonSchemaObject,
 	JsonSchemaTypeName,
 	JsonValue,
 	Path,
 	PathSegment,
+	ResolvedJsonSchema,
+	ResolvedJsonSchemaObject,
 	Result,
 } from './types.js';

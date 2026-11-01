@@ -35,27 +35,27 @@ export type JsonSchemaTypeName =
 	'array' | 'boolean' | 'integer' | 'null' | 'number' | 'object' | 'string';
 
 /**
- * A JSON Schema object, as written in draft-04, draft-06, or draft-07. It names
- * the keywords this package reads. Any other keyword is allowed and is kept as
- * it is.
+ * The keywords of a JSON Schema object, as written in draft-04, draft-06, or
+ * draft-07, with `Child` as the type of its subschemas. It names the keywords
+ * this package reads. Any other keyword is allowed and is kept as it is.
  *
  * Fields that changed between drafts list both forms: `id` (draft-04) and
  * `$id`, and a boolean (draft-04) or numeric `exclusiveMinimum` and
  * `exclusiveMaximum`.
  */
-export interface JsonSchemaObject {
+export interface JsonSchemaKeywords<Child> {
 	readonly $schema?: string;
 	readonly $id?: string;
 	/** The draft-04 spelling of `$id`. */
 	readonly id?: string;
 	readonly $ref?: string;
 	readonly type?: JsonSchemaTypeName | readonly JsonSchemaTypeName[];
-	readonly properties?: { readonly [name: string]: JsonSchema };
+	readonly properties?: { readonly [name: string]: Child };
 	readonly required?: readonly string[];
-	readonly items?: JsonSchema | readonly JsonSchema[];
-	readonly additionalItems?: JsonSchema;
-	readonly additionalProperties?: JsonSchema;
-	readonly definitions?: { readonly [name: string]: JsonSchema };
+	readonly items?: Child | readonly Child[];
+	readonly additionalItems?: Child;
+	readonly additionalProperties?: Child;
+	readonly definitions?: { readonly [name: string]: Child };
 	readonly enum?: readonly JsonValue[];
 	readonly default?: JsonValue;
 	readonly description?: string;
@@ -69,12 +69,23 @@ export interface JsonSchemaObject {
 	readonly multipleOf?: number;
 	readonly minItems?: number;
 	readonly maxItems?: number;
-	readonly allOf?: readonly JsonSchema[];
-	readonly anyOf?: readonly JsonSchema[];
-	readonly oneOf?: readonly JsonSchema[];
-	readonly not?: JsonSchema;
+	readonly allOf?: readonly Child[];
+	readonly anyOf?: readonly Child[];
+	readonly oneOf?: readonly Child[];
+	readonly not?: Child;
 	readonly [keyword: string]: unknown;
 }
 
+/** A JSON Schema object. It may contain `$ref`. */
+export type JsonSchemaObject = JsonSchemaKeywords<JsonSchema>;
+
 /** A JSON Schema. A boolean is a valid schema from draft-06 on. */
 export type JsonSchema = JsonSchemaObject | boolean;
+
+/** A JSON Schema object with no `$ref` in any subschema. */
+export type ResolvedJsonSchemaObject = JsonSchemaKeywords<ResolvedJsonSchema> & {
+	readonly $ref?: never;
+};
+
+/** The result of `resolveRefs`: a JSON Schema with every `$ref` replaced. */
+export type ResolvedJsonSchema = ResolvedJsonSchemaObject | boolean;
