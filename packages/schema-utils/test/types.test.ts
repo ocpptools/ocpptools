@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import type { JsonSchema, JsonValue, Path, Result } from '../src/index.js';
+import type { JsonSchema, JsonValue, Path, ResolvedJsonSchema, Result } from '../src/index.js';
 
 describe('types', () => {
 	it('accepts a draft-04 style schema', () => {
@@ -42,6 +42,20 @@ describe('types', () => {
 		const value: JsonValue = { a: [1, 'two', null, { b: false }] };
 		const schema: JsonSchema = { default: value, enum: [value, 1, 'x'] };
 		expect(schema).toBeTypeOf('object');
+	});
+
+	it('keeps $ref out of a resolved schema, at any depth', () => {
+		const resolved: ResolvedJsonSchema = {
+			properties: { a: { type: 'string', items: [{ type: 'number' }, true] } },
+		};
+		const asRaw: JsonSchema = resolved;
+		expect(asRaw).toBe(resolved);
+
+		// @ts-expect-error A resolved schema has no $ref.
+		const top: ResolvedJsonSchema = { $ref: '#/definitions/A' };
+		// @ts-expect-error A resolved schema has no $ref in a subschema either.
+		const nested: ResolvedJsonSchema = { properties: { a: { $ref: '#/definitions/A' } } };
+		expect([top, nested]).toHaveLength(2);
 	});
 
 	it('describes locations as segments and outcomes as results', () => {

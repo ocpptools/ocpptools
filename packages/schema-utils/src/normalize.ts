@@ -9,6 +9,12 @@ import {
 	type SupportedDraft,
 } from './draft.js';
 import { defineData, isJsonObject, ownValue } from './json.js';
+import {
+	mapSchemaChildren,
+	schemaKeywords,
+	schemaListKeywords,
+	schemaMapKeywords,
+} from './keywords.js';
 import type { JsonObject, JsonSchema, JsonValue, Path, Result } from './types.js';
 
 export interface NormalizeOptions {
@@ -63,27 +69,6 @@ interface Context {
 	readonly warnings: NormalizeWarning[];
 }
 
-// Keywords that hold one schema.
-const schemaKeywords = new Set([
-	'additionalItems',
-	'additionalProperties',
-	'contains',
-	'else',
-	'if',
-	'not',
-	'propertyNames',
-	'then',
-]);
-// Keywords that hold a list of schemas.
-const schemaListKeywords = new Set(['allOf', 'anyOf', 'oneOf']);
-// Keywords that hold an object whose values are schemas. The names are data.
-const schemaMapKeywords = new Set([
-	'definitions',
-	'dependencies',
-	'patternProperties',
-	'properties',
-]);
-
 const draft07Keywords = new Set([
 	...schemaKeywords,
 	...schemaListKeywords,
@@ -120,32 +105,6 @@ const draft07Keywords = new Set([
 	'uniqueItems',
 	'writeOnly',
 ]);
-
-function normalizeKeyword(
-	keyword: string,
-	value: JsonValue,
-	path: Path,
-	context: Context,
-): JsonValue {
-	const here = [...path, keyword];
-	if (schemaKeywords.has(keyword)) {
-		return normalizeNode(value, here, context, false);
-	}
-	if (keyword === 'items' || schemaListKeywords.has(keyword)) {
-		if (Array.isArray(value)) {
-			return value.map((item, index) => normalizeNode(item, [...here, index], context, false));
-		}
-		return keyword === 'items' ? normalizeNode(value, here, context, false) : value;
-	}
-	if (schemaMapKeywords.has(keyword) && isJsonObject(value)) {
-		const copy: JsonObject = {};
-		for (const [name, entry] of Object.entries(value)) {
-			defineData(copy, name, normalizeNode(entry, [...here, name], context, false));
-		}
-		return copy;
-	}
-	return value;
-}
 
 function normalizeNode(node: JsonValue, path: Path, context: Context, isRoot: boolean): JsonValue {
 	if (!isJsonObject(node)) {
@@ -199,7 +158,13 @@ function normalizeNode(node: JsonValue, path: Path, context: Context, isRoot: bo
 		if (context.strip && !draft07Keywords.has(key)) {
 			continue;
 		}
-		defineData(copy, key, normalizeKeyword(key, value, path, context));
+		defineData(
+			copy,
+			key,
+			mapSchemaChildren(key, value, path, (child, childPath) =>
+				normalizeNode(child, childPath, context, false),
+			),
+		);
 	}
 	return copy;
 }

@@ -64,7 +64,7 @@ assert.equal(pkg.createMessageIdGenerator()().length, 36);
 	{
 		directory: 'schema-utils',
 		name: '@ocpptools/schema-utils',
-		exports: ['detectDraft', 'normalizeSchema'],
+		exports: ['detectDraft', 'normalizeSchema', 'resolveRefs'],
 		behavior: `
 const legacy = { id: 'urn:example:smoke', exclusiveMinimum: true, minimum: 1 };
 assert.equal(pkg.detectDraft({ $schema: 'http://json-schema.org/draft-04/schema#' }), 'draft-04');
@@ -77,6 +77,20 @@ assert.deepEqual(pkg.normalizeSchema({ $schema: 'http://json-schema.org/draft-04
 	},
 });
 assert.equal(pkg.normalizeSchema(undefined).error.kind, 'invalid-schema');
+
+const refs = pkg.resolveRefs({
+	definitions: { Name: { type: 'string' } },
+	properties: { name: { $ref: '#/definitions/Name' } },
+});
+assert.deepEqual(refs, {
+	ok: true,
+	value: {
+		definitions: { Name: { type: 'string' } },
+		properties: { name: { type: 'string' } },
+	},
+});
+assert.equal(pkg.resolveRefs({ $ref: '#' }).error.kind, 'circular-ref');
+assert.equal(pkg.resolveRefs({ $ref: 'other.json' }).error.kind, 'external-ref');
 `,
 	},
 ];
