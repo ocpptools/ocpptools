@@ -33,10 +33,13 @@ question and is not decided here.
    returns `{ ok: true, value }` or `{ ok: false, error }`, as in ADR 0001. The
    error kinds are `invalid-schema`, `unresolved-ref`, `external-ref`,
    `circular-ref`, `invalid-pointer`, and `limit-exceeded`, each with the path
-   and the reference that caused it. Normalizing, describing fields, building
-   payloads, and applying defaults are total: they do not throw.
+   and the reference that caused it. Normalizing returns a result too, with the
+   single kind `invalid-schema`, for input that is not a JSON schema (not JSON,
+   or not an object or a boolean). Describing fields, building payloads, and
+   applying defaults take a schema that has already been checked and are total.
+   No function throws.
 4. **Normalize to draft-07.** `normalizeSchema` accepts draft-04, draft-06, and
-   draft-07, and returns draft-07 plus a list of warnings.
+   draft-07, and returns draft-07 plus a list of warnings, in a result.
    - Draft-04 to draft-07: `id` becomes `$id`, `$schema` is updated, and the
      boolean `exclusiveMinimum` and `exclusiveMaximum` become numeric.
    - Draft-06 to draft-07: only `$schema` changes.
@@ -47,7 +50,9 @@ question and is not decided here.
      default). A newer draft is returned unchanged with a warning.
    - Keywords that are not part of the draft, such as `javaType`, are kept.
      `stripUnknownKeywords` removes them for strict validators.
-   - Normalizing twice gives the same result as normalizing once.
+   - Normalizing twice gives the same result as normalizing once. A schema read
+     as draft-04 or draft-06 gets a draft-07 `$schema`, even when it had none,
+     so the result says what it is.
 5. **References are local and checked.** Only same-document references are
    resolved (`#`, `#/definitions/...`). An external reference is an error and
    nothing is fetched. Siblings of `$ref` are ignored, as in draft-07. Cycles
