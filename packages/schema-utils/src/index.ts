@@ -13,6 +13,8 @@ export type {
 	NormalizeWarningCode,
 	NormalizedSchema,
 } from './normalize.js';
+export { applyDefaults, createEmptyPayload } from './payload.js';
+export type { ApplyDefaultsError, EmptyPayloadFill, EmptyPayloadOptions } from './payload.js';
 export { resolveRefs } from './resolve.js';
 export type { ResolveError, ResolveErrorKind, ResolveOptions } from './resolve.js';
 export type {
