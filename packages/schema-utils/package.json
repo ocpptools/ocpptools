@@ -1,0 +1,51 @@
+{
+  "name": "@ocpptools/schema-utils",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure JSON Schema utilities: draft normalization, $ref resolution, field metadata, and payload defaults.",
+  "license": "Apache-2.0",
+  "author": "Rodolfo Carrillo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ocpptools/ocpptools.git",
+    "directory": "packages/schema-utils"
+  },
+  "bugs": "https://github.com/ocpptools/ocpptools/issues",
+  "homepage": "https://github.com/ocpptools/ocpptools",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "NOTICE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "clean": "tsc -b --clean tsconfig.build.json",
+    "typecheck:test": "tsc --noEmit -p tsconfig.json",
+    "lint:package": "publint && attw --pack . --profile esm-only",
+    "prepack": "node ../../scripts/sync-license.mjs copy",
+    "size": "size-limit"
+  },
+  "devDependencies": {
+    "@ocpptools/tsconfig": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "size-limit": [
+    {
+      "path": "dist/*.js",
+      "limit": "1 kB"
+    }
+  ]
+}
