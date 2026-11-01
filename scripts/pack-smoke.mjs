@@ -64,7 +64,7 @@ assert.equal(pkg.createMessageIdGenerator()().length, 36);
 	{
 		directory: 'schema-utils',
 		name: '@ocpptools/schema-utils',
-		exports: ['detectDraft', 'normalizeSchema', 'resolveRefs'],
+		exports: ['detectDraft', 'getFields', 'normalizeSchema', 'resolveRefs'],
 		behavior: `
 const legacy = { id: 'urn:example:smoke', exclusiveMinimum: true, minimum: 1 };
 assert.equal(pkg.detectDraft({ $schema: 'http://json-schema.org/draft-04/schema#' }), 'draft-04');
@@ -91,6 +91,19 @@ assert.deepEqual(refs, {
 });
 assert.equal(pkg.resolveRefs({ $ref: '#' }).error.kind, 'circular-ref');
 assert.equal(pkg.resolveRefs({ $ref: 'other.json' }).error.kind, 'external-ref');
+
+const root = pkg.getFields({
+	type: 'object',
+	properties: { name: { type: 'string', maxLength: 5 }, tags: { type: 'array', items: { type: 'string' } } },
+	required: ['name'],
+});
+assert.equal(root.kind, 'object');
+assert.deepEqual(root.children.map((field) => [field.name, field.kind, field.required]), [
+	['name', 'string', true],
+	['tags', 'array', false],
+]);
+assert.equal(root.children[0].maxLength, 5);
+assert.deepEqual(root.children[1].item.path, ['tags', 0]);
 `,
 	},
 ];
