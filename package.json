@@ -45,7 +45,7 @@
     "@size-limit/file": "^11.2.0",
     "@types/node": "^22",
     "@vitest/coverage-v8": "^4.1.12",
-    "eslint": "^9",
+    "eslint": "^10",
     "eslint-config-prettier": "^10",
     "globals": "^17",
     "prettier": "^3",
