@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Rodolfo Carrillo
 
+import { defineData } from './json.js';
 import type { JsonValue, Path, PathSegment, Result } from './types.js';
 
 /**
@@ -70,13 +71,7 @@ function cloneObject(
 			return property;
 		}
 		path.pop();
-		// A plain assignment of "__proto__" would change the prototype of `copy`.
-		Object.defineProperty(copy, key, {
-			value: property.value,
-			writable: true,
-			enumerable: true,
-			configurable: true,
-		});
+		defineData(copy, key, property.value);
 	}
 	return { ok: true, value: copy };
 }
