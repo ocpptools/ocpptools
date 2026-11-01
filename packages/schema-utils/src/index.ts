@@ -3,6 +3,8 @@
 
 export { detectDraft } from './draft.js';
 export type { SchemaDraft, SupportedDraft } from './draft.js';
+export { getFields } from './fields.js';
+export type { Field, FieldKind, GetFieldsOptions, UnsupportedReason } from './fields.js';
 export { normalizeSchema } from './normalize.js';
 export type {
 	NormalizeError,
