@@ -47,7 +47,7 @@ order before opening a pull request:
 5. `pnpm build`
 6. `pnpm lint:packages` (`publint`, `attw`), `pnpm test:pack` (installs the
    packed tarball in a throwaway project), and `pnpm size`
-7. `pnpm lint:ai-files` and `pnpm lint:licenses`
+7. `pnpm lint:ai-files`, `pnpm lint:schemas`, and `pnpm lint:licenses`
 
 ## Package boundaries
 
@@ -76,6 +76,8 @@ Keep exported API boundaries on `unknown`, not `any`.
 - Code and documentation are Apache-2.0.
 - Contributions are inbound = outbound under Apache-2.0 with DCO sign-off.
 - Do not add OCPP JSON Schemas unless their license permits redistribution.
+  `pnpm lint:schemas` fails CI on files that look like OCA schemas. Write
+  synthetic fixtures with ids such as `urn:example:...`.
 - Do not commit AI-assistant files (instructions, rules, prompts, memory, or
   local settings, including `AGENTS.md`). They are ignored by Git and
   `pnpm lint:ai-files` fails CI if any is tracked.

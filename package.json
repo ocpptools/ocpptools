@@ -33,8 +33,9 @@
     "lint:packages": "pnpm -r --filter @ocpptools/* --if-present run lint:package",
     "test:pack": "node scripts/pack-smoke.mjs",
     "lint:ai-files": "node scripts/check-no-ai-files.mjs",
+    "lint:schemas": "node scripts/check-no-oca-schemas.mjs",
     "lint:licenses": "reuse lint",
-    "verify": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm typecheck:test && pnpm test:coverage && pnpm build && pnpm lint:packages && pnpm test:pack && pnpm size && pnpm lint:ai-files && pnpm lint:licenses",
+    "verify": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm typecheck:test && pnpm test:coverage && pnpm build && pnpm lint:packages && pnpm test:pack && pnpm size && pnpm lint:ai-files && pnpm lint:schemas && pnpm lint:licenses",
     "docs:api": "typedoc",
     "size": "pnpm -r --filter @ocpptools/* --if-present run size"
   },
