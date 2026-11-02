@@ -22,14 +22,14 @@ and message construction for OCPP 1.6J and 2.0.1.
 
 ## Packages
 
-| Package                   | Status  | Purpose                                                        |
-| ------------------------- | ------- | -------------------------------------------------------------- |
-| `@ocpptools/core`         | Alpha   | OCPP types, frames, parser/serializer, transport interfaces    |
-| `@ocpptools/schema-utils` | Planned | JSON Schema normalization and field metadata                   |
-| `@ocpptools/validator`    | Planned | Ajv-based validation with an injectable schema registry        |
-| `@ocpptools/simulator`    | Planned | Headless charging-station simulator with injectable transports |
-| `@ocpptools/builder`      | Planned | Headless payload and frame construction                        |
-| `@ocpptools/schemas`      | Blocked | OCPP schemas; pending license review                           |
+| Package                   | Status         | Purpose                                                        |
+| ------------------------- | -------------- | -------------------------------------------------------------- |
+| `@ocpptools/core`         | Alpha          | OCPP types, frames, parser/serializer, transport interfaces    |
+| `@ocpptools/schema-utils` | In development | JSON Schema normalization and field metadata                   |
+| `@ocpptools/validator`    | Planned        | Ajv-based validation with an injectable schema registry        |
+| `@ocpptools/simulator`    | Planned        | Headless charging-station simulator with injectable transports |
+| `@ocpptools/builder`      | Planned        | Headless payload and frame construction                        |
+| `@ocpptools/schemas`      | Blocked        | OCPP schemas; pending license review                           |
 
 The build order is `core` → `schema-utils` / schemas decision → `validator` →
 `simulator` → `builder`. Optional packages such as `@ocpptools/testing`,

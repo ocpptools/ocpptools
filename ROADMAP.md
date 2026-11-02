@@ -24,6 +24,10 @@ metadata. Decide whether it is published or bundled before validator and
 builder depend on it. Keep OCPP schemas out of the public repository until
 their license is verified.
 
+Status: `schema-utils` is implemented and tested, but it is private and not
+released. It is published together with the validator, which is its first
+consumer. The decision on OCPP schemas is still open.
+
 ## Phase 3 — Validator
 
 Extract `@ocpptools/validator`: Ajv, ajv-formats, injectable schema registry,

@@ -1,7 +1,7 @@
 {
   "$schema": "https://typedoc.org/schema.json",
-  "entryPoints": ["packages/core/src/index.ts"],
-  "tsconfig": "packages/core/tsconfig.build.json",
+  "entryPoints": ["packages/core/src/index.ts", "packages/schema-utils/src/index.ts"],
+  "tsconfig": "tsconfig.typedoc.json",
   "out": "docs/api",
   "name": "OCPP Tools",
   "readme": "README.md",
