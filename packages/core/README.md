@@ -89,7 +89,9 @@ merged, because the spelling and the content changed:
 | (not defined)                  | `RpcFrameworkError`             |
 
 The 1.6J spelling `OccurenceConstraintViolation` (one `r`) is part of that
-version of the protocol, so it is kept as is.
+version of the protocol, so it is kept as is. The Open Charge Alliance's 1.6-J
+errata sheet (2025-04) lists it, and `FormationViolation`, as known typos and
+chooses not to fix them, because that would change messages on the wire.
 
 ```ts
 import { OCPP_ERROR_CODES, isErrorCode } from '@ocpptools/core';

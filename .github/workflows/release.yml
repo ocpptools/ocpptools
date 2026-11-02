@@ -60,4 +60,8 @@ jobs:
           push-with-git-cli: true
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: 'true'
+          # pnpm 11 publishes by itself and reads `pnpm_config_*` variables. It
+          # ignores `NPM_CONFIG_PROVENANCE`, so 0.1.0 of core went out without an
+          # attestation. The name is case sensitive on Linux. Check a release
+          # with `npm view <package>@<version> dist.attestations`.
+          pnpm_config_provenance: 'true'
