@@ -65,7 +65,7 @@ jobs:
       - run: node scripts/check-no-ai-files.mjs
 
   oca-schemas:
-    name: No OCA schemas
+    name: OCA schemas are unmodified
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -76,6 +76,7 @@ jobs:
         with:
           node-version: 22
       - run: node scripts/check-no-oca-schemas.mjs
+      - run: node scripts/check-verbatim-schemas.mjs
 
   ci-ok:
     name: CI OK

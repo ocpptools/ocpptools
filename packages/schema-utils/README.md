@@ -10,7 +10,8 @@ Pure JSON Schema utilities for the OCPP Tools packages: draft normalization,
 It has no runtime dependencies. It does not use the DOM or Node APIs, and it
 never reads files or the network. It does not validate data, it knows nothing
 about OCPP, and it does not include any OCPP JSON Schema. Schemas are plain
-values that you pass in.
+values that you pass in. The Open Charge Alliance's own schemas, unmodified, are
+in [`@ocpptools/schemas`](../schemas/README.md).
 
 ## The pipeline
 

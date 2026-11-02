@@ -17,8 +17,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // and free of spaces, which tar and the Windows shell both need.
 const cacheDir = '.cache/pack-smoke';
 
-const allowedFile = /^package\/(package\.json|README\.md|LICENSE|NOTICE|dist\/.+)$/;
-const requiredFiles = [
+const defaultAllowedFile = /^package\/(package\.json|README\.md|LICENSE|NOTICE|dist\/.+)$/;
+const defaultRequiredFiles = [
 	'package.json',
 	'README.md',
 	'LICENSE',
@@ -29,7 +29,8 @@ const requiredFiles = [
 
 // `exports` is the whole runtime API, so adding or removing an export fails
 // here until it is listed on purpose. `behavior` runs in the consumer project
-// with the package imported as `pkg`.
+// with the package imported as `pkg`. A package of data files sets
+// `allowedFile`, `requiredFiles`, and its own `consumer` source instead.
 const packages = [
 	{
 		directory: 'core',
@@ -129,6 +130,49 @@ assert.deepEqual(pkg.applyDefaults(payloadSchema, { mode: 'slow' }), {
 assert.equal(pkg.applyDefaults(payloadSchema, undefined).error.kind, 'invalid-value');
 `,
 	},
+	{
+		directory: 'schemas',
+		name: '@ocpptools/schemas',
+		allowedFile:
+			/^package\/(package\.json|README\.md|LICENSE|NOTICE|SOURCES\.md|manifest\.json|LICENSE-CC-BY-ND-4\.0\.txt|schemas\/(1\.6|2\.0\.1)\/[A-Za-z0-9]+\.json)$/,
+		requiredFiles: [
+			'package.json',
+			'README.md',
+			'LICENSE',
+			'NOTICE',
+			'SOURCES.md',
+			'manifest.json',
+			'LICENSE-CC-BY-ND-4.0.txt',
+			'schemas/1.6/Authorize.json',
+			'schemas/2.0.1/AuthorizeRequest.json',
+		],
+		// The OCA JSON Schemas must reach users byte for byte, with the license.
+		consumer: `
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import authorize16 from '@ocpptools/schemas/1.6/Authorize.json' with { type: 'json' };
+import authorize201 from '@ocpptools/schemas/2.0.1/AuthorizeRequest.json' with { type: 'json' };
+
+const require = createRequire(import.meta.url);
+const manifest = JSON.parse(readFileSync(require.resolve('@ocpptools/schemas/manifest.json'), 'utf8'));
+const paths = Object.keys(manifest.files);
+assert.equal(paths.length, 184);
+for (const path of paths) {
+	const bytes = readFileSync(require.resolve('@ocpptools/schemas/' + path));
+	assert.equal(createHash('sha256').update(bytes).digest('hex'), manifest.files[path], path);
+}
+assert.equal(typeof authorize16.id, 'string');
+assert.equal(typeof authorize201.$id, 'string');
+
+const license = readFileSync(
+	new URL('./node_modules/@ocpptools/schemas/LICENSE-CC-BY-ND-4.0.txt', import.meta.url),
+	'utf8',
+);
+assert.ok(license.startsWith('Attribution-NoDerivatives 4.0 International'));
+`,
+	},
 ];
 
 /**
@@ -164,13 +208,15 @@ async function check(pkg) {
 		.split('\n')
 		.map((line) => line.trim())
 		.filter((line) => line !== '' && !line.endsWith('/'));
+	const allowedFile = pkg.allowedFile ?? defaultAllowedFile;
 	const unexpected = entries.filter((entry) => !allowedFile.test(entry));
 	if (unexpected.length > 0) {
 		throw new Error(
 			`${pkg.name} tarball contains files that should not be published:\n  ${unexpected.join('\n  ')}`,
 		);
 	}
-	const missing = requiredFiles.filter((file) => !entries.includes(`package/${file}`));
+	const required = pkg.requiredFiles ?? defaultRequiredFiles;
+	const missing = required.filter((file) => !entries.includes(`package/${file}`));
 	if (missing.length > 0) {
 		throw new Error(`${pkg.name} tarball is missing files:\n  ${missing.join('\n  ')}`);
 	}
@@ -180,7 +226,9 @@ async function check(pkg) {
 		resolve(root, workDir, 'consumer/package.json'),
 		'{"type":"module","private":true}\n',
 	);
-	const consumerSource = `
+	const consumerSource =
+		pkg.consumer ??
+		`
 import assert from 'node:assert/strict';
 import * as pkg from '${pkg.name}';
 

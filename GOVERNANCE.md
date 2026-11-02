@@ -29,7 +29,10 @@ maintainership as trusted contributors emerge.
 - Contributions use the Developer Certificate of Origin. No CLA.
 - Public API changes require a changeset.
 - Security issues are handled privately before public disclosure.
-- The project does not accept OCPP schemas until their license is verified.
+- The only OCPP schemas in the repository are the Open Charge Alliance's
+  originals in `packages/schemas`, unmodified and under CC BY-ND 4.0 (see
+  [ADR 0003](docs/ADR/0003-oca-json-schemas.md)). The project does not accept
+  edited, generated, or other copies of them.
 
 ## Releases
 

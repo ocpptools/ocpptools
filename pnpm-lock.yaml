@@ -69,6 +69,8 @@ importers:
         specifier: workspace:*
         version: link:../tsconfig
 
+  packages/schemas: {}
+
   packages/tsconfig: {}
 
 packages:

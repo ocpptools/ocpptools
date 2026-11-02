@@ -18,18 +18,19 @@ and message construction for OCPP 1.6J and 2.0.1.
 - Not a hosted CSMS.
 - Not a website, SEO project, or content repository.
 - Not a place for ads, analytics, deployment configuration, or private assets.
-- Not a distributor of OCPP JSON Schemas until their license is confirmed.
+- Not the author of the OCPP JSON Schemas. They are written by the Open Charge
+  Alliance. Unmodified copies live in `@ocpptools/schemas`, under CC BY-ND 4.0.
 
 ## Packages
 
-| Package                   | Status         | Purpose                                                        |
-| ------------------------- | -------------- | -------------------------------------------------------------- |
-| `@ocpptools/core`         | Alpha          | OCPP types, frames, parser/serializer, transport interfaces    |
-| `@ocpptools/schema-utils` | In development | JSON Schema normalization and field metadata                   |
-| `@ocpptools/validator`    | Planned        | Ajv-based validation with an injectable schema registry        |
-| `@ocpptools/simulator`    | Planned        | Headless charging-station simulator with injectable transports |
-| `@ocpptools/builder`      | Planned        | Headless payload and frame construction                        |
-| `@ocpptools/schemas`      | Blocked        | OCPP schemas; pending license review                           |
+| Package                   | Status         | Purpose                                                            |
+| ------------------------- | -------------- | ------------------------------------------------------------------ |
+| `@ocpptools/core`         | Alpha          | OCPP types, frames, parser/serializer, transport interfaces        |
+| `@ocpptools/schema-utils` | In development | JSON Schema normalization and field metadata                       |
+| `@ocpptools/validator`    | Planned        | Ajv-based validation with an injectable schema registry            |
+| `@ocpptools/simulator`    | Planned        | Headless charging-station simulator with injectable transports     |
+| `@ocpptools/builder`      | Planned        | Headless payload and frame construction                            |
+| `@ocpptools/schemas`      | Unreleased     | Unmodified OCA JSON Schemas (CC BY-ND 4.0, © Open Charge Alliance) |
 
 The build order is `core` → `schema-utils` / schemas decision → `validator` →
 `simulator` → `builder`. Optional packages such as `@ocpptools/testing`,
@@ -52,7 +53,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the individual steps.
 - No DOM, UI framework, or Tailwind in published packages.
 - Public packages must be consumed by a real consumer before release.
 - Apache-2.0 for code and documentation. DCO, no CLA.
-- OCPP schemas stay out of this repository until their license is verified.
+- The OCPP schemas are the Open Charge Alliance's. Only unmodified copies of
+  the originals are kept, in one package, with their license and attribution.
 
 ## Roadmap
 
@@ -70,7 +72,20 @@ Private Vulnerability Reporting for this repository.
 
 ## License
 
-Apache License, Version 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+Apache License, Version 2.0, for the code and documentation. See
+[LICENSE](LICENSE) and [NOTICE](NOTICE). The Open Charge Alliance's JSON Schemas
+are the exception, see below.
+
+## Third-party material
+
+The OCPP JSON Schemas in [`packages/schemas`](packages/schemas) are not our
+work. They are written and published by the
+[Open Charge Alliance](https://openchargealliance.org/), which holds the
+copyright. They are included as byte-for-byte copies of the originals under the
+Creative Commons Attribution-NoDerivatives 4.0 International license
+(CC BY-ND 4.0). The Apache License does not apply to them. See
+[packages/schemas/SOURCES.md](packages/schemas/SOURCES.md) and
+[LICENSES/CC-BY-ND-4.0.txt](LICENSES/CC-BY-ND-4.0.txt).
 
 ## Trademark notice
 

@@ -60,7 +60,10 @@ order before opening a pull request:
 - `simulator`: headless protocol engine. Browser and Node transports live in
   subpaths. No DOM, toasts, panels, or Tailwind.
 - `builder`: headless payload and frame construction. No UI or Tailwind.
-- `schemas`: do not add OCPP schemas until their license is verified.
+- `schemas`: unmodified copies of the Open Charge Alliance's JSON Schemas, with
+  their license and attribution (see
+  [ADR 0003](docs/ADR/0003-oca-json-schemas.md)). Never edit, format,
+  normalize, or generate from them inside that package.
 
 Keep exported API boundaries on `unknown`, not `any`.
 
@@ -75,9 +78,12 @@ Keep exported API boundaries on `unknown`, not `any`.
 
 - Code and documentation are Apache-2.0.
 - Contributions are inbound = outbound under Apache-2.0 with DCO sign-off.
-- Do not add OCPP JSON Schemas unless their license permits redistribution.
-  `pnpm lint:schemas` fails CI on files that look like OCA schemas. Write
-  synthetic fixtures with ids such as `urn:example:...`.
+- The OCPP JSON Schemas belong to the Open Charge Alliance (CC BY-ND 4.0). They
+  live only in `packages/schemas`, as byte-for-byte copies. Do not edit them,
+  and do not add schemas, copies, or schema-derived files anywhere else.
+  `pnpm lint:schemas` fails CI on files that look like OCA schemas outside that
+  package and on any change to the originals. Write synthetic fixtures with ids
+  such as `urn:example:...`.
 - Do not commit AI-assistant files (instructions, rules, prompts, memory, or
   local settings, including `AGENTS.md`). They are ignored by Git and
   `pnpm lint:ai-files` fails CI if any is tracked.

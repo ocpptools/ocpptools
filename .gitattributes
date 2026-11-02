@@ -74,3 +74,8 @@ yarn.lock text eol=lf
 *.mp3 binary
 *.wav binary
 *.wasm binary
+
+# OCA JSON Schemas: byte-for-byte copies of the originals. Never convert line
+# endings or touch the bytes. The license (CC BY-ND 4.0) forbids sharing
+# modified material. `pnpm lint:schemas` checks every file against a manifest.
+packages/schemas/schemas/** -text

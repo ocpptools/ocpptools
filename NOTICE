@@ -10,6 +10,10 @@ sponsored by, or certified by the Open Charge Alliance.
 The Apache License, Version 2.0, applies to the original code and documentation
 in this repository. Third-party dependencies retain their own licenses.
 
-OCPP JSON Schemas are not included in this repository unless their license
-permits redistribution. See TRADEMARKS.md and the project roadmap for the
-current schema policy.
+The OCPP JSON Schemas in packages/schemas/schemas are not part of OCPP Tools'
+original work. They were written and published by the Open Charge Alliance,
+which holds the copyright, and are included as unmodified copies under the
+Creative Commons Attribution-NoDerivatives 4.0 International Public License
+(CC BY-ND 4.0). The Apache License does not apply to them. See
+packages/schemas/SOURCES.md, packages/schemas/README.md, and
+LICENSES/CC-BY-ND-4.0.txt.

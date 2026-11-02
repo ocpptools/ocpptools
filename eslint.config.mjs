@@ -15,6 +15,8 @@ export default tseslint.config(
 			'**/node_modules/**',
 			'**/*.tsbuildinfo',
 			'.changeset/**',
+			// Local, untracked scratch files.
+			'personal/**',
 		],
 	},
 	js.configs.recommended,
