@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Rodolfo Carrillo
 
-// Packs each package listed below, unpacks the tarball into a throwaway
+// Packs each package listed below, installs the tarball into a throwaway
 // consumer project, and checks what a real user would get: the allowed files
-// only, the expected public exports, and a working round trip. Run `pnpm build`
-// first, because the tarballs ship `dist/`. Pass package directory names to
-// check only those, for example `node scripts/pack-smoke.mjs core`.
+// only, the expected public exports, and a working round trip. A package
+// without dependencies is unpacked into `node_modules`; one with dependencies
+// is installed with pnpm, with its workspace dependencies packed too and used
+// instead of the versions on npm. Run `pnpm build` first, because the tarballs
+// ship `dist/`. Pass package directory names to check only those, for example
+// `node scripts/pack-smoke.mjs core`.
 
 import { execFileSync } from 'node:child_process';
 import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -30,7 +33,9 @@ const defaultRequiredFiles = [
 // `exports` is the whole runtime API, so adding or removing an export fails
 // here until it is listed on purpose. `behavior` runs in the consumer project
 // with the package imported as `pkg`. A package of data files sets
-// `allowedFile`, `requiredFiles`, and its own `consumer` source instead.
+// `allowedFile`, `requiredFiles`, and its own `consumer` source instead. A
+// package that depends on other workspace packages lists their directories in
+// `workspaceDependencies`.
 const packages = [
 	{
 		directory: 'core',
@@ -181,6 +186,28 @@ const license = readFileSync(
 assert.ok(license.startsWith('Attribution-NoDerivatives 4.0 International'));
 `,
 	},
+	{
+		directory: 'validator',
+		name: '@ocpptools/validator',
+		workspaceDependencies: ['core', 'schema-utils'],
+		exports: [],
+		behavior: `
+// Every dependency is installed, and the workspace ones are the local tarballs:
+// the published @ocpptools/core 0.1.1 has no inspectFrame.
+const { createRequire } = await import('node:module');
+const { dirname, join } = await import('node:path');
+const { pathToFileURL } = await import('node:url');
+const require = createRequire(import.meta.resolve('@ocpptools/validator'));
+require.resolve('ajv');
+require.resolve('ajv-formats');
+const coreDirectory = dirname(require.resolve('@ocpptools/core/package.json'));
+const core = await import(pathToFileURL(join(coreDirectory, 'dist/index.js')).href);
+assert.equal(typeof core.inspectFrame, 'function');
+const schemaUtilsDirectory = dirname(require.resolve('@ocpptools/schema-utils/package.json'));
+const schemaUtils = await import(pathToFileURL(join(schemaUtilsDirectory, 'dist/index.js')).href);
+assert.equal(typeof schemaUtils.normalizeSchema, 'function');
+`,
+	},
 ];
 
 /**
@@ -197,20 +224,64 @@ function run(command, args, cwd = root) {
 	});
 }
 
+/**
+ * Packs a package into an empty directory and returns the tarball's path.
+ *
+ * @param {string} name
+ * @param {string} destination
+ */
+async function pack(name, destination) {
+	await mkdir(resolve(root, destination), { recursive: true });
+	run('pnpm', ['--filter', name, 'pack', '--pack-destination', destination]);
+	const tarballs = (await readdir(resolve(root, destination))).filter((file) =>
+		file.endsWith('.tgz'),
+	);
+	if (tarballs.length !== 1) {
+		throw new Error(`Expected one tarball in ${destination}, found ${String(tarballs.length)}`);
+	}
+	return `${destination}/${tarballs[0]}`;
+}
+
+/**
+ * Installs the tarball and its dependencies with pnpm. The consumer has its own
+ * `pnpm-workspace.yaml`, so pnpm does not treat it as part of this workspace,
+ * and its `overrides` replace each workspace dependency with a local tarball.
+ *
+ * @param {(typeof packages)[number]} pkg
+ * @param {string} tarball
+ * @param {string} workDir
+ */
+async function install(pkg, tarball, workDir) {
+	const overrides = [];
+	for (const directory of pkg.workspaceDependencies ?? []) {
+		const dependency = packages.find((entry) => entry.directory === directory);
+		if (dependency === undefined) {
+			throw new Error(`Unknown workspace dependency of ${pkg.name}: ${directory}`);
+		}
+		const dependencyTarball = await pack(dependency.name, `${workDir}/dependencies/${directory}`);
+		overrides.push(
+			`  ${JSON.stringify(dependency.name)}: ${JSON.stringify(`file:../dependencies/${directory}/${basename(dependencyTarball)}`)}`,
+		);
+	}
+	const consumerDir = `${workDir}/consumer`;
+	await mkdir(resolve(root, consumerDir), { recursive: true });
+	await writeFile(
+		resolve(root, consumerDir, 'package.json'),
+		`${JSON.stringify({ type: 'module', private: true, dependencies: { [pkg.name]: `file:../${basename(tarball)}` } })}\n`,
+	);
+	await writeFile(
+		resolve(root, consumerDir, 'pnpm-workspace.yaml'),
+		`overrides:\n${overrides.join('\n')}\n`,
+	);
+	run('pnpm', ['install', '--prefer-offline', '--reporter=silent'], resolve(root, consumerDir));
+}
+
 /** @param {(typeof packages)[number]} pkg */
 async function check(pkg) {
 	const workDir = `${cacheDir}/${pkg.directory}`;
-	const installDir = `${workDir}/consumer/node_modules/${pkg.name}`;
 
 	await rm(resolve(root, workDir), { recursive: true, force: true });
-	await mkdir(resolve(root, installDir), { recursive: true });
-
-	run('pnpm', ['--filter', pkg.name, 'pack', '--pack-destination', workDir]);
-	const tarballs = (await readdir(resolve(root, workDir))).filter((name) => name.endsWith('.tgz'));
-	if (tarballs.length !== 1) {
-		throw new Error(`Expected one tarball in ${workDir}, found ${String(tarballs.length)}`);
-	}
-	const tarball = `${workDir}/${tarballs[0]}`;
+	const tarball = await pack(pkg.name, workDir);
 
 	const entries = run('tar', ['-tzf', tarball])
 		.split('\n')
@@ -229,11 +300,17 @@ async function check(pkg) {
 		throw new Error(`${pkg.name} tarball is missing files:\n  ${missing.join('\n  ')}`);
 	}
 
-	run('tar', ['-xzf', tarball, '-C', installDir, '--strip-components=1']);
-	await writeFile(
-		resolve(root, workDir, 'consumer/package.json'),
-		'{"type":"module","private":true}\n',
-	);
+	if (pkg.workspaceDependencies === undefined) {
+		const installDir = `${workDir}/consumer/node_modules/${pkg.name}`;
+		await mkdir(resolve(root, installDir), { recursive: true });
+		run('tar', ['-xzf', tarball, '-C', installDir, '--strip-components=1']);
+		await writeFile(
+			resolve(root, workDir, 'consumer/package.json'),
+			'{"type":"module","private":true}\n',
+		);
+	} else {
+		await install(pkg, tarball, workDir);
+	}
 	const consumerSource =
 		pkg.consumer ??
 		`
@@ -249,7 +326,7 @@ ${pkg.behavior}`;
 	});
 
 	console.log(
-		`Pack smoke test passed for ${pkg.name} (${String(entries.length)} files in ${tarballs[0]}).`,
+		`Pack smoke test passed for ${pkg.name} (${String(entries.length)} files in ${basename(tarball)}).`,
 	);
 }
 

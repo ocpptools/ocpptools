@@ -1,0 +1,58 @@
+{
+  "name": "@ocpptools/validator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Validation of OCPP-J frames and payloads against the OCPP JSON Schemas, with readable errors.",
+  "license": "Apache-2.0",
+  "author": "Rodolfo Carrillo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ocpptools/ocpptools.git",
+    "directory": "packages/validator"
+  },
+  "bugs": "https://github.com/ocpptools/ocpptools/issues",
+  "homepage": "https://github.com/ocpptools/ocpptools",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "NOTICE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "clean": "tsc -b --clean tsconfig.build.json",
+    "typecheck:test": "tsc --noEmit -p tsconfig.json",
+    "lint:package": "publint && attw --pack . --profile esm-only",
+    "prepack": "node ../../scripts/sync-license.mjs copy",
+    "size": "size-limit"
+  },
+  "dependencies": {
+    "@ocpptools/core": "workspace:^",
+    "@ocpptools/schema-utils": "workspace:^",
+    "ajv": "^8.18.0",
+    "ajv-formats": "^3.0.1"
+  },
+  "devDependencies": {
+    "@ocpptools/schemas": "workspace:*",
+    "@ocpptools/tsconfig": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "size-limit": [
+    {
+      "path": "dist/*.js",
+      "limit": "1 kB"
+    }
+  ]
+}
