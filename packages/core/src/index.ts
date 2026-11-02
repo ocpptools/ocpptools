@@ -5,6 +5,14 @@ export type { Clock, TimerHandle } from './clock.js';
 export { OCPP_ERROR_CODES, isErrorCode } from './error-codes.js';
 export type { OcppErrorCode } from './error-codes.js';
 export { MESSAGE_TYPE, isCall, isCallError, isCallResult } from './frame.js';
+export { MAX_MESSAGE_ID_LENGTH, inspectFrame } from './inspect.js';
+export type {
+	FrameInspection,
+	FrameIssue,
+	FrameIssueCode,
+	FrameIssueSeverity,
+	InspectFrameOptions,
+} from './inspect.js';
 export type {
 	CallErrorFrame,
 	CallFrame,
