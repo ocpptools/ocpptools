@@ -42,6 +42,26 @@ action's schema.
 When a frame is rejected but its message ID could be read, `error.messageId` is
 set, so you can answer with a CALLERROR.
 
+## Inspect a frame
+
+`inspectFrame` takes a frame that is already parsed from JSON and reports every
+structural problem, instead of stopping at the first one. Use it to show all the
+problems of a frame at once.
+
+```ts
+import { inspectFrame } from '@ocpptools/core';
+
+const { issues } = inspectFrame(JSON.parse('[2,"","",[]]'), { version: '2.0.1' });
+// issues: invalid-message-id at [1], invalid-action at [2], invalid-payload at [3]
+```
+
+Each issue has a `code`, a `severity`, a `path` (the index of the element, or
+empty for the whole frame), a `message`, and short `expected` and `received`
+texts. It applies the same rules as `parseFrame`: a frame without `error` issues
+is one that `parseFrame` accepts. It also warns about a message ID longer than
+36 characters (`MAX_MESSAGE_ID_LENGTH`), and with a `version` it checks a
+CALLERROR error code against that version's codes.
+
 ## Serialize a frame
 
 `serializeFrame` returns compact JSON text, or a result describing why the frame
