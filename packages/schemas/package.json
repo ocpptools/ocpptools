@@ -1,6 +1,6 @@
 {
   "name": "@ocpptools/schemas",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "description": "Unmodified copies of the Open Charge Alliance OCPP 1.6J and 2.0.1 JSON Schemas, with their license and attribution.",
   "keywords": [
