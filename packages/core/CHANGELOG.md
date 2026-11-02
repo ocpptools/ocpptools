@@ -1,5 +1,11 @@
 # @ocpptools/core
 
+## 0.1.1
+
+### Patch Changes
+
+- 1729bce: Update the package README. The status is now alpha, and the notes on error codes cite the Open Charge Alliance errata that keeps the original 1.6J spellings. No code changes.
+
 ## 0.1.0
 
 ### Minor Changes
