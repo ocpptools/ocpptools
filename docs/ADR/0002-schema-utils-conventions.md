@@ -1,6 +1,6 @@
 # 0002. schema-utils conventions
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-11-01
 
 ## Context
@@ -15,7 +15,7 @@ mean, and how it ships.
 
 The package works on JSON Schema structure only. It does not know OCPP.
 Whether OCA JSON Schemas may be distributed with this project is a separate
-question and is not decided here.
+question and is not decided here; ADR 0003 decides it.
 
 ## Decision
 

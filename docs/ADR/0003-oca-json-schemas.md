@@ -1,6 +1,6 @@
 # 0003. OCA JSON Schemas: attribution, license, and where they live
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-11-01
 
 ## Context
@@ -24,6 +24,12 @@ package and the OCPP 2.0.1 Edition 4 package):
 - The 2.0.1 package describes itself as the OCPP 2.0.1 specification parts and
   lists the JSON schemas as Part 3. The 2.0.1 schemas are dated 2020-03-31 and
   were not changed by Edition 4 or by its errata.
+- The OCPP-J 1.6 errata sheet (2025-04) states CC BY-ND 4.0 and says it
+  contains errata on "the OCPP 1.6-J specification (JSON) and JSON-Schema
+  files". It also says that one JSON schema was updated in that release
+  (`StopTransaction`; the other 1.6J schemas date from 2019-12). The OCA
+  treats the schema files as part of the specification it publishes under that
+  license.
 - **The JSON schema files themselves carry no license notice**, and the OCA
   site and terms of service say nothing about them. Nothing in the packages
   states that they are excluded from CC BY-ND 4.0 either.

@@ -16,7 +16,9 @@ every file is in [manifest.json](manifest.json).
   2026-11-01.
 - **SHA-256 of the package:**
   `2a1d80284ca60449e85951fc55bc0538b5d45bd6f97c6d9228745acacb52c11b`
-- **Identifiers inside the files:** URNs of the OCA, version 1.6, December 2019, written in JSON Schema draft-04.
+- **Version stamps inside the files:** 55 files carry December 2019 (2019-12).
+  `StopTransaction.json` carries April 2025 (2025-04): the OCA updated it in the
+  2025-04 errata release. All are written in JSON Schema draft-04.
 - **License:** CC BY-ND 4.0. The documents in this package state it. For
   example, the 1.6 specification (edition 2) says: "Copyright © 2010 – 2017 Open
   Charge Alliance. All rights reserved." and "This document is made available
@@ -24,6 +26,12 @@ every file is in [manifest.json](manifest.json).
   License". The two SOAP service descriptions (`.wsdl`) in the same folder carry
   the same notice in their headers.
 - The JSON files themselves contain no notice.
+- **Errata:** the OCPP-J 1.6 errata sheet (2025-04) is in the same package. It
+  says it contains errata on the 1.6-J specification and on the JSON Schema
+  files, and that one JSON Schema file was updated in that release. It carries
+  "Copyright © 2010 – 2025 Open Charge Alliance" and the same CC BY-ND 4.0
+  notice. It leaves the spellings `FormationViolation` and
+  `OccurenceConstraintViolation` of the error codes as they are.
 
 ## OCPP 2.0.1 — `schemas/2.0.1`
 
