@@ -1,0 +1,10 @@
+{
+  "extends": "./packages/tsconfig/library.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "incremental": false,
+    "types": []
+  },
+  "include": ["packages/core/src/**/*.ts", "packages/schema-utils/src/**/*.ts"]
+}
