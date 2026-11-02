@@ -35,9 +35,10 @@ question and is not decided here.
    `circular-ref`, `invalid-pointer`, and `limit-exceeded`, each with the path
    and the reference that caused it. Normalizing returns a result too, with the
    single kind `invalid-schema`, for input that is not a JSON schema (not JSON,
-   or not an object or a boolean). Describing fields, building payloads, and
-   applying defaults take a schema that has already been checked and are total.
-   No function throws.
+   or not an object or a boolean). Applying defaults to a value does the same
+   with the kind `invalid-value`, because the value comes from outside.
+   Describing fields and building an empty payload take a schema that has
+   already been checked and are total. No function throws.
 4. **Normalize to draft-07.** `normalizeSchema` accepts draft-04, draft-06, and
    draft-07, and returns draft-07 plus a list of warnings, in a result.
    - Draft-04 to draft-07: `id` becomes `$id`, `$schema` is updated, and the
@@ -72,11 +73,13 @@ question and is not decided here.
 7. **Payloads and defaults are explicit.** `applyDefaults` is a separate call
    and only fills properties that are absent, like Ajv's `useDefaults`. It
    never creates a parent object just to hold a default and never overwrites a
-   present value, including `0`, `false`, and `''`. `createEmptyPayload` builds
-   the required skeleton only: required objects are expanded, required arrays
-   are empty, and a required leaf takes its `default`, else the first `enum`
-   value, else is omitted. The option `fill: 'typed-zero'` uses `''`, `0`, or
-   `false` instead of omitting. Nothing applies defaults implicitly.
+   present value, including `0`, `false`, and `''`. A default that is an object
+   gets the defaults of its own properties. `createEmptyPayload` builds the
+   required skeleton only: required objects are expanded, required arrays are
+   empty, and a required leaf takes its `default`, else the first `enum` value,
+   else is omitted, except `null`, which is always `null`. The option
+   `fill: 'typed-zero'` uses `''`, `0`, or `false` instead of omitting. Nothing
+   applies defaults implicitly.
 8. **Hostile input is data.** Property names such as `__proto__`,
    `constructor`, and `prototype` are copied as ordinary keys and never
    assigned in a way that changes a prototype. The package has no

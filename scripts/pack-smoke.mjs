@@ -64,7 +64,14 @@ assert.equal(pkg.createMessageIdGenerator()().length, 36);
 	{
 		directory: 'schema-utils',
 		name: '@ocpptools/schema-utils',
-		exports: ['detectDraft', 'getFields', 'normalizeSchema', 'resolveRefs'],
+		exports: [
+			'applyDefaults',
+			'createEmptyPayload',
+			'detectDraft',
+			'getFields',
+			'normalizeSchema',
+			'resolveRefs',
+		],
 		behavior: `
 const legacy = { id: 'urn:example:smoke', exclusiveMinimum: true, minimum: 1 };
 assert.equal(pkg.detectDraft({ $schema: 'http://json-schema.org/draft-04/schema#' }), 'draft-04');
@@ -104,6 +111,22 @@ assert.deepEqual(root.children.map((field) => [field.name, field.kind, field.req
 ]);
 assert.equal(root.children[0].maxLength, 5);
 assert.deepEqual(root.children[1].item.path, ['tags', 0]);
+
+const payloadSchema = {
+	type: 'object',
+	properties: {
+		name: { type: 'string', default: 'unnamed' },
+		mode: { type: 'string', enum: ['fast', 'slow'] },
+		note: { type: 'string', default: 'none' },
+	},
+	required: ['name', 'mode'],
+};
+assert.deepEqual(pkg.createEmptyPayload(payloadSchema), { name: 'unnamed', mode: 'fast' });
+assert.deepEqual(pkg.applyDefaults(payloadSchema, { mode: 'slow' }), {
+	ok: true,
+	value: { mode: 'slow', name: 'unnamed', note: 'none' },
+});
+assert.equal(pkg.applyDefaults(payloadSchema, undefined).error.kind, 'invalid-value');
 `,
 	},
 ];
