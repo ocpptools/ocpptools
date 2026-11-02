@@ -21,12 +21,16 @@ or complete schemas. Freeze a small public API and cover it with tests.
 
 Extract `@ocpptools/schema-utils` for JSON Schema normalization and field
 metadata. Decide whether it is published or bundled before validator and
-builder depend on it. Keep OCPP schemas out of the public repository until
-their license is verified.
+builder depend on it. The OCPP schemas are the Open Charge Alliance's: only
+unmodified copies are kept, in `@ocpptools/schemas`, with their license.
 
 Status: `schema-utils` is implemented and tested, but it is private and not
 released. It is published together with the validator, which is its first
-consumer. The decision on OCPP schemas is still open.
+consumer. `@ocpptools/schemas` holds byte-for-byte copies of the Open Charge
+Alliance's JSON Schemas under CC BY-ND 4.0, with attribution. It is published
+as an alpha package. The Open Charge Alliance has not confirmed in writing that
+the JSON files are covered by the license, and the maintainers accept that risk
+(ADR 0003).
 
 ## Phase 3 — Validator
 
@@ -51,7 +55,7 @@ cleanly, the builder stays internal and is not published.
 
 Create `@ocpptools/testing` only if external users ask for it: mock CSMS,
 in-memory transport, frame factories, and fixtures. Fixtures must not include
-unlicensed OCPP schemas.
+copies or adaptations of the OCPP schemas.
 
 ## Phase 7 — Kit and CLI
 
@@ -70,6 +74,6 @@ simulator from the documentation.
 
 - No hosted CSMS.
 - No website content, SEO, ads, analytics, or private assets in this repo.
-- No OCPP schemas until their license is verified.
+- No edited, generated, or adapted copies of the OCPP schemas.
 - No package per website tool.
 - No UI framework packages.

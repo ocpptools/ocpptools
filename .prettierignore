@@ -3,3 +3,4 @@ coverage
 docs/api
 pnpm-lock.yaml
 *.tsbuildinfo
+packages/schemas/schemas

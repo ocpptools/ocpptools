@@ -3,7 +3,12 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { OCA_SCHEMA_ID_PREFIX, allowedPaths, findOffenders } from '../lib/oca-schema-rules.mjs';
+import {
+	OCA_SCHEMA_ID_PREFIX,
+	allowedPaths,
+	allowedPrefixes,
+	findOffenders,
+} from '../lib/oca-schema-rules.mjs';
 
 const ocaId = `{ "$id": "${OCA_SCHEMA_ID_PREFIX}2.0.1:BootNotificationRequest" }`;
 
@@ -63,7 +68,30 @@ describe('findOffenders', () => {
 		expect(findOffenders(files, new Set(['vendor/ResetRequest.json']))).toEqual([]);
 	});
 
-	it('allows nothing by default', () => {
+	it('allows single paths for nothing by default', () => {
 		expect(allowedPaths.size).toBe(0);
+	});
+
+	it('allows the OCA schemas only in the dedicated directory', () => {
+		expect(allowedPrefixes).toEqual(['packages/schemas/schemas/']);
+		const files = [
+			{ path: 'packages/schemas/schemas/2.0.1/ResetRequest.json', content: ocaId },
+			{ path: 'packages/schemas/schemas/1.6/Reset.json', content: ocaId },
+			{ path: 'packages/schemas/README.md', content: ocaId },
+			{ path: 'packages/schemas/other/ResetRequest.json', content: ocaId },
+			{ path: 'packages/schemas-extra/schemas/ResetRequest.json', content: ocaId },
+		];
+		expect(findOffenders(files).map((offender) => offender.path)).toEqual([
+			'packages/schemas/README.md',
+			'packages/schemas/other/ResetRequest.json',
+			'packages/schemas/other/ResetRequest.json',
+			'packages/schemas-extra/schemas/ResetRequest.json',
+			'packages/schemas-extra/schemas/ResetRequest.json',
+		]);
+	});
+
+	it('honors explicit prefixes', () => {
+		const files = [{ path: 'vendor/x/ResetRequest.json', content: ocaId }];
+		expect(findOffenders(files, new Set(), ['vendor/x/'])).toEqual([]);
 	});
 });

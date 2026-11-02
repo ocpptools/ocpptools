@@ -11,4 +11,4 @@
 - [ ] Docs updated if behavior or APIs changed.
 - [ ] `pnpm verify` passes locally.
 - [ ] No secrets, private content, private website references, AI-assistant
-      files, or OCPP schemas.
+      files, or OCPP schemas outside `packages/schemas`.

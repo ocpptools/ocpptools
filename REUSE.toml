@@ -18,7 +18,10 @@ path = [
   ".changeset/**",
   ".github/**",
   "docs/**",
-  "packages/**/*.json",
+  "packages/*/package.json",
+  "packages/*/tsconfig*.json",
+  "packages/tsconfig/*.json",
+  "packages/schemas/manifest.json",
   "packages/**/*.md",
   "packages/**/dist/**",
   "packages/*/LICENSE",
@@ -27,3 +30,12 @@ path = [
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Rodolfo Carrillo"
 SPDX-License-Identifier = "Apache-2.0"
+
+# The OCA JSON Schemas are not ours. They are byte-for-byte copies of files
+# written and published by the Open Charge Alliance, under CC BY-ND 4.0. See
+# docs/ADR/0003-oca-json-schemas.md and packages/schemas/SOURCES.md.
+[[annotations]]
+path = ["packages/schemas/schemas/**"]
+precedence = "override"
+SPDX-FileCopyrightText = "Open Charge Alliance"
+SPDX-License-Identifier = "CC-BY-ND-4.0"

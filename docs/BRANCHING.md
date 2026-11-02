@@ -62,7 +62,8 @@ Every pull request needs:
 - A changeset when a public package API changes.
 - DCO sign-off on commits.
 - Documentation updates when behavior or APIs change.
-- No secrets, private content, private website references, or OCPP schemas.
+- No secrets, private content, private website references, or OCPP schemas
+  outside `packages/schemas`.
 - One coherent change. Large changes should be split.
 
 ## Merge policy

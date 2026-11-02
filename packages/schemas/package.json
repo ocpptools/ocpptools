@@ -1,0 +1,45 @@
+{
+  "name": "@ocpptools/schemas",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Unmodified copies of the Open Charge Alliance OCPP 1.6J and 2.0.1 JSON Schemas, with their license and attribution.",
+  "keywords": [
+    "ocpp",
+    "ocpp-j",
+    "json-schema",
+    "open-charge-alliance"
+  ],
+  "license": "Apache-2.0 AND CC-BY-ND-4.0",
+  "author": "Rodolfo Carrillo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ocpptools/ocpptools.git",
+    "directory": "packages/schemas"
+  },
+  "bugs": "https://github.com/ocpptools/ocpptools/issues",
+  "homepage": "https://github.com/ocpptools/ocpptools",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "exports": {
+    "./1.6/*": "./schemas/1.6/*",
+    "./2.0.1/*": "./schemas/2.0.1/*",
+    "./manifest.json": "./manifest.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "schemas",
+    "manifest.json",
+    "SOURCES.md",
+    "LICENSE-CC-BY-ND-4.0.txt",
+    "NOTICE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "lint:package": "publint",
+    "prepack": "node ../../scripts/sync-license.mjs copy"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
