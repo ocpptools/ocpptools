@@ -190,8 +190,31 @@ assert.ok(license.startsWith('Attribution-NoDerivatives 4.0 International'));
 		directory: 'validator',
 		name: '@ocpptools/validator',
 		workspaceDependencies: ['core', 'schema-utils'],
-		exports: [],
+		exports: ['SchemaLoadError', 'createSchemaRegistry', 'schemaFileName'],
 		behavior: `
+assert.equal(pkg.schemaFileName('1.6', 'Heartbeat', 'request'), 'Heartbeat.json');
+assert.equal(pkg.schemaFileName('2.0.1', 'Heartbeat', 'request'), 'HeartbeatRequest.json');
+assert.equal(pkg.schemaFileName('2.0.1', '../x', 'response'), undefined);
+const loaded = [];
+const registry = pkg.createSchemaRegistry({
+	version: '2.0.1',
+	files: ['2.0.1/HeartbeatRequest.json'],
+	load: async (fileName) => {
+		loaded.push(fileName);
+		return { type: 'object' };
+	},
+});
+assert.deepEqual(await registry.get('Heartbeat', 'request'), { type: 'object' });
+assert.equal(registry.get('Heartbeat', 'response'), undefined);
+assert.deepEqual(loaded, ['HeartbeatRequest.json']);
+const failing = pkg.createSchemaRegistry({
+	version: '1.6',
+	load: () => {
+		throw new Error('boom');
+	},
+});
+await assert.rejects(Promise.resolve(failing.get('Heartbeat', 'request')), pkg.SchemaLoadError);
+
 // Every dependency is installed, and the workspace ones are the local tarballs:
 // the published @ocpptools/core 0.1.1 has no inspectFrame.
 const { createRequire } = await import('node:module');
