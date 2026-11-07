@@ -1,5 +1,11 @@
 # @ocpptools/core
 
+## 0.2.0
+
+### Minor Changes
+
+- a78fa4b: Add `inspectFrame`, which reports every structural problem of a parsed frame instead of stopping at the first one, with a path, a message, and expected and received texts for each. It applies the same rules as `parseFrame`, warns about message IDs longer than 36 characters (`MAX_MESSAGE_ID_LENGTH`), and can check a CALLERROR error code against an OCPP version. `parseFrame` does not change.
+
 ## 0.1.1
 
 ### Patch Changes
