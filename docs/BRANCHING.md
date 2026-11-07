@@ -83,14 +83,14 @@ Every pull request needs:
 The following status checks must pass before merge. Names are the exact job
 names reported to GitHub:
 
-| Check                             | Workflow                | Covers                                                                                                                                      |
-| --------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CI OK`                           | `ci.yml`                | Aggregates lint, format, typecheck, tests, build, package checks (`publint`, `attw`), size, REUSE, and the AI-files guard on Node 22 and 24 |
-| `Analyze (javascript-typescript)` | `codeql.yml`            | CodeQL for source code                                                                                                                      |
-| `Analyze (actions)`               | `codeql.yml`            | CodeQL for workflows                                                                                                                        |
-| `Dependency Review`               | `dependency-review.yml` | Vulnerable or newly added dependencies                                                                                                      |
-| `DCO`                             | `dco.yml`               | `Signed-off-by` on every commit                                                                                                             |
-| `Conventional Commits title`      | `pr-title.yml`          | Pull request title format                                                                                                                   |
+| Check                             | Workflow                | Covers                                                                                                                                                    |
+| --------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CI OK`                           | `ci.yml`                | Aggregates lint, format, typecheck, tests, build, bundle check, package checks (`publint`, `attw`), size, REUSE, and the AI-files guard on Node 22 and 24 |
+| `Analyze (javascript-typescript)` | `codeql.yml`            | CodeQL for source code                                                                                                                                    |
+| `Analyze (actions)`               | `codeql.yml`            | CodeQL for workflows                                                                                                                                      |
+| `Dependency Review`               | `dependency-review.yml` | Vulnerable or newly added dependencies                                                                                                                    |
+| `DCO`                             | `dco.yml`               | `Signed-off-by` on every commit                                                                                                                           |
+| `Conventional Commits title`      | `pr-title.yml`          | Pull request title format                                                                                                                                 |
 
 `CI OK` is the only CI job required directly. It fails if any job it depends on
 fails, so adding or renaming jobs inside `ci.yml` does not change branch
@@ -175,8 +175,8 @@ bypass, the maintainers open a follow-up pull request and record what happened.
 Release tags use the package format:
 
 ```text
-@ocpptools/core@0.1.0
-@ocpptools/validator@0.1.0
+@ocpptools/core@0.1.1
+@ocpptools/validator@0.2.0
 ```
 
 Tags are annotated, protected, and immutable. GitHub Releases are created from

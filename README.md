@@ -4,8 +4,9 @@ Open-source TypeScript libraries for the Open Charge Point Protocol (OCPP):
 frame parsing, schema-driven validation, headless charging-station simulation,
 and message construction for OCPP 1.6J and 2.0.1.
 
-> **Status:** alpha. `@ocpptools/core` 0.1.0 is published on npm; the other
-> packages are planned. APIs are unstable until 1.0.0.
+> **Status:** alpha. `@ocpptools/core` 0.1.1 and `@ocpptools/schemas` 0.1.0 are
+> published on npm; `@ocpptools/schema-utils` and `@ocpptools/validator` are in
+> development. APIs are unstable until 1.0.0.
 
 ## What this repository is
 
@@ -23,14 +24,14 @@ and message construction for OCPP 1.6J and 2.0.1.
 
 ## Packages
 
-| Package                   | Status         | Purpose                                                            |
-| ------------------------- | -------------- | ------------------------------------------------------------------ |
-| `@ocpptools/core`         | Alpha          | OCPP types, frames, parser/serializer, transport interfaces        |
-| `@ocpptools/schema-utils` | In development | JSON Schema normalization and field metadata                       |
-| `@ocpptools/validator`    | Planned        | Ajv-based validation with an injectable schema registry            |
-| `@ocpptools/simulator`    | Planned        | Headless charging-station simulator with injectable transports     |
-| `@ocpptools/builder`      | Planned        | Headless payload and frame construction                            |
-| `@ocpptools/schemas`      | Unreleased     | Unmodified OCA JSON Schemas (CC BY-ND 4.0, © Open Charge Alliance) |
+| Package                   | Status        | Purpose                                                            |
+| ------------------------- | ------------- | ------------------------------------------------------------------ |
+| `@ocpptools/core`         | Alpha         | OCPP types, frames, parser/serializer, transport interfaces        |
+| `@ocpptools/schema-utils` | Private alpha | JSON Schema normalization and field metadata                       |
+| `@ocpptools/validator`    | Private alpha | Ajv-based validation with an injectable schema registry            |
+| `@ocpptools/simulator`    | Planned       | Headless charging-station simulator with injectable transports     |
+| `@ocpptools/builder`      | Planned       | Headless payload and frame construction                            |
+| `@ocpptools/schemas`      | Alpha         | Unmodified OCA JSON Schemas (CC BY-ND 4.0, © Open Charge Alliance) |
 
 The build order is `core` → `schema-utils` / schemas decision → `validator` →
 `simulator` → `builder`. Optional packages such as `@ocpptools/testing`,

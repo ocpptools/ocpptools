@@ -1,6 +1,10 @@
 {
   "$schema": "https://typedoc.org/schema.json",
-  "entryPoints": ["packages/core/src/index.ts", "packages/schema-utils/src/index.ts"],
+  "entryPoints": [
+    "packages/core/src/index.ts",
+    "packages/schema-utils/src/index.ts",
+    "packages/validator/src/index.ts"
+  ],
   "tsconfig": "tsconfig.typedoc.json",
   "out": "docs/api",
   "name": "OCPP Tools",

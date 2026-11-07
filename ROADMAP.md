@@ -25,7 +25,7 @@ builder depend on it. The OCPP schemas are the Open Charge Alliance's: only
 unmodified copies are kept, in `@ocpptools/schemas`, with their license.
 
 Status: `schema-utils` is implemented and tested, but it is private and not
-released. It is published together with the validator, which is its first
+released. It will be published together with the validator, which is its first
 consumer. `@ocpptools/schemas` holds byte-for-byte copies of the Open Charge
 Alliance's JSON Schemas under CC BY-ND 4.0, with attribution. It is published
 as an alpha package. The Open Charge Alliance has not confirmed in writing that
@@ -37,6 +37,10 @@ the JSON files are covered by the license, and the maintainers accept that risk
 Extract `@ocpptools/validator`: Ajv, ajv-formats, injectable schema registry,
 lazy compilation per action, and readable errors for 1.6J and 2.0.1. The first
 real consumer is the private website, which must use the published package.
+
+Status: implemented and tested against all 184 schemas, with a bundle check and
+parity against the live site validators. The package is private until it is
+published with `core` and `schema-utils` in 0.2.0.
 
 ## Phase 4 — Simulator
 

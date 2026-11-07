@@ -6,5 +6,9 @@
     "incremental": false,
     "types": []
   },
-  "include": ["packages/core/src/**/*.ts", "packages/schema-utils/src/**/*.ts"]
+  "include": [
+    "packages/core/src/**/*.ts",
+    "packages/schema-utils/src/**/*.ts",
+    "packages/validator/src/**/*.ts"
+  ]
 }

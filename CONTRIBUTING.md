@@ -45,9 +45,10 @@ order before opening a pull request:
 3. `pnpm typecheck` and `pnpm typecheck:test`
 4. `pnpm test:coverage`
 5. `pnpm build`
-6. `pnpm lint:packages` (`publint`, `attw`), `pnpm test:pack` (installs the
+6. `pnpm bundle:check` (the consumer bundle must not load unused schemas)
+7. `pnpm lint:packages` (`publint`, `attw`), `pnpm test:pack` (installs the
    packed tarball in a throwaway project), and `pnpm size`
-7. `pnpm lint:ai-files`, `pnpm lint:schemas`, and `pnpm lint:licenses`
+8. `pnpm lint:ai-files`, `pnpm lint:schemas`, and `pnpm lint:licenses`
 
 ## Package boundaries
 
