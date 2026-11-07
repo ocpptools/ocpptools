@@ -3,6 +3,8 @@
   "references": [
     { "path": "./packages/core/tsconfig.build.json" },
     { "path": "./packages/schema-utils/tsconfig.build.json" },
-    { "path": "./packages/validator/tsconfig.build.json" }
+    { "path": "./packages/validator/tsconfig.build.json" },
+    { "path": "./packages/simulator/tsconfig.build.json" },
+    { "path": "./packages/simulator/tsconfig.browser.json" }
   ]
 }

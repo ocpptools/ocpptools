@@ -14,6 +14,19 @@ export default defineConfig({
 			'@ocpptools/schema-utils': fileURLToPath(
 				new URL('packages/schema-utils/src/index.ts', import.meta.url),
 			),
+			// Subpaths go before the package root: Vite matches aliases by prefix.
+			'@ocpptools/simulator/browser': fileURLToPath(
+				new URL('packages/simulator/src/browser/index.ts', import.meta.url),
+			),
+			'@ocpptools/simulator/1.6': fileURLToPath(
+				new URL('packages/simulator/src/1.6.ts', import.meta.url),
+			),
+			'@ocpptools/simulator/2.0.1': fileURLToPath(
+				new URL('packages/simulator/src/2.0.1.ts', import.meta.url),
+			),
+			'@ocpptools/simulator': fileURLToPath(
+				new URL('packages/simulator/src/index.ts', import.meta.url),
+			),
 		},
 	},
 	test: {

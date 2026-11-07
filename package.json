@@ -19,7 +19,8 @@
   },
   "scripts": {
     "build": "tsc -b tsconfig.json",
-    "bundle:check": "node scripts/bundle-check.mjs",
+    "bundle:check": "node scripts/bundle-check.mjs && pnpm bundle:check:simulator",
+    "bundle:check:simulator": "node scripts/simulator-bundle-check.mjs && node scripts/check-simulator-dom.mjs",
     "clean": "tsc -b --clean tsconfig.json",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
