@@ -44,15 +44,11 @@
   },
   "devDependencies": {
     "@ocpptools/schemas": "workspace:*",
-    "@ocpptools/tsconfig": "workspace:*"
+    "@ocpptools/tsconfig": "workspace:*",
+    "@size-limit/esbuild": "^14.3.0",
+    "@size-limit/file": "^14.3.0"
   },
   "publishConfig": {
     "access": "public"
-  },
-  "size-limit": [
-    {
-      "path": "dist/*.js",
-      "limit": "7 kB"
-    }
-  ]
+  }
 }
