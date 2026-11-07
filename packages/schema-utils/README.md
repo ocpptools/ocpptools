@@ -3,8 +3,8 @@
 Pure JSON Schema utilities for the OCPP Tools packages: draft normalization,
 `$ref` resolution, field metadata, and payload defaults.
 
-> **Status:** not released. This package is private and its API can still
-> change. The conventions it follows are in
+> **Status:** private alpha. This package will be published with `validator` in
+> the 0.2.0 release and its API can still change. The conventions it follows are in
 > [ADR 0002](https://github.com/ocpptools/ocpptools/blob/main/docs/ADR/0002-schema-utils-conventions.md).
 
 It has no runtime dependencies. It does not use the DOM or Node APIs, and it

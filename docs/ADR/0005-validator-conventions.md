@@ -1,6 +1,6 @@
 # 0005. Validator conventions
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-11-02
 
 ## Context
@@ -69,9 +69,10 @@ Facts that shape the design:
 7. **Results are a stable model of the package's own.** A result is one of
    `valid`, `invalid-frame`, `unknown-action`, `schema-missing`, or
    `invalid-payload`, with a list of issues and a list of warnings. An issue has
-   a path as segments (a string for a property, a number for an index), a JSON
-   pointer, a message written by this package, the JSON Schema keyword when
-   there is one, and short `expected` and `received` texts. Payload validation
+   a code, a path as segments (a string for a property, a number for an index),
+   a JSON pointer, a message written by this package, the JSON Schema keyword
+   only for a `schema-violation`, and short `expected` and `received` texts.
+   Payload validation
    messages are written by this package. A schema compilation failure includes a
    short reason from Ajv, which can change between Ajv releases; Ajv error
    objects are not exposed. `received` is truncated so a large payload does not
