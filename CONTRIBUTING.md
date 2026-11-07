@@ -58,8 +58,9 @@ order before opening a pull request:
   dependency of published packages, it must be publishable or bundled.
 - `validator`: Ajv with an injectable schema registry. No DOM. Lazy compilation
   per action.
-- `simulator`: headless protocol engine. Browser and Node transports live in
-  subpaths. No DOM, toasts, panels, or Tailwind.
+- `simulator`: headless protocol engine. The browser transport lives in a
+  subpath; the Node adapter comes with the CLI. No DOM, toasts, panels, or
+  Tailwind in the engine.
 - `builder`: headless payload and frame construction. No UI or Tailwind.
 - `schemas`: unmodified copies of the Open Charge Alliance's JSON Schemas, with
   their license and attribution (see
