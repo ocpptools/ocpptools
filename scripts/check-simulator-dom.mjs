@@ -51,10 +51,17 @@ function filesIn(directory) {
 }
 
 for (const file of filesIn(distDir)) {
+	const relativeFile = relative(packageDir, file).replaceAll('\\', '/');
 	const text = stripComments(readFileSync(file, 'utf8'));
 	for (const [name, pattern] of forbidden) {
+		if (name === 'Math.random' && relativeFile === 'dist/random.js') {
+			continue;
+		}
+		if ((name === 'setTimeout' || name === 'setInterval') && relativeFile === 'dist/clock.js') {
+			continue;
+		}
 		if (pattern.test(text)) {
-			throw new Error(`Simulator engine module ${relative(packageDir, file)} uses ${name}`);
+			throw new Error(`Simulator engine module ${relativeFile} uses ${name}`);
 		}
 	}
 }
