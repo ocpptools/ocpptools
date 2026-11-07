@@ -235,6 +235,15 @@ const broken = pkg.createValidator({
 const invalidSchema = await broken.validatePayload('Heartbeat', 'request', {});
 assert.equal(invalidSchema.status, 'schema-missing');
 assert.equal(invalidSchema.issues[0].code, 'schema-invalid');
+const moduleLike = pkg.createValidator({
+	version: '2.0.1',
+	schemas: {
+		get: () => ({ [Symbol.toStringTag]: 'Module', default: { type: 'object' } }),
+	},
+});
+const moduleResult = await moduleLike.validatePayload('Heartbeat', 'request', {});
+assert.equal(moduleResult.status, 'schema-missing');
+assert.equal(moduleResult.issues[0].code, 'schema-invalid');
 const loaded = [];
 const registry = pkg.createSchemaRegistry({
 	version: '2.0.1',

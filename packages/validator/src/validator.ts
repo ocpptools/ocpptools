@@ -20,6 +20,46 @@ class SchemaInvalidError extends Error {
 	}
 }
 
+function isModuleNamespace(value: unknown): boolean {
+	if (typeof value !== 'object' || value === null) {
+		return false;
+	}
+	try {
+		if (Object.prototype.toString.call(value) === '[object Module]') {
+			return true;
+		}
+		return (
+			Object.hasOwn(value, '__esModule') && (value as { __esModule?: unknown }).__esModule === true
+		);
+	} catch {
+		return false;
+	}
+}
+
+function hasUnsafePropertyName(schema: unknown): boolean {
+	if (typeof schema !== 'object' || schema === null) {
+		return false;
+	}
+	if (Array.isArray(schema)) {
+		return schema.some(hasUnsafePropertyName);
+	}
+	const record = schema as Record<string, unknown>;
+	const properties = record['properties'];
+	if (
+		typeof properties === 'object' &&
+		properties !== null &&
+		!Array.isArray(properties) &&
+		Object.hasOwn(properties, '__proto__')
+	) {
+		return true;
+	}
+	const required = record['required'];
+	if (Array.isArray(required) && required.includes('__proto__')) {
+		return true;
+	}
+	return Object.values(record).some(hasUnsafePropertyName);
+}
+
 function loadFailureMessage(action: string, kind: PayloadKind, error: unknown): string {
 	if (error instanceof SchemaLoadError) {
 		const cause = error.cause;
@@ -70,14 +110,38 @@ export function createValidator(options: CreateValidatorOptions): Validator {
 				cache.delete(key);
 				return undefined;
 			}
-			const normalized = normalizeSchema(schema, { stripUnknownKeywords: true });
+			if (isModuleNamespace(schema)) {
+				throw new SchemaInvalidError(
+					'The registry returned a module namespace; return its default export',
+				);
+			}
+			let normalized;
+			try {
+				normalized = normalizeSchema(schema, {
+					defaultDraft: version === '1.6' ? 'draft-04' : 'draft-06',
+					stripUnknownKeywords: true,
+				});
+			} catch (error) {
+				throw new SchemaInvalidError(
+					error instanceof Error && error.message !== ''
+						? error.message
+						: 'The schema could not be normalized',
+				);
+			}
 			if (!normalized.ok) {
 				throw new SchemaInvalidError(normalized.error.message);
 			}
+			if (hasUnsafePropertyName(normalized.value.schema)) {
+				throw new SchemaInvalidError('The schema uses "__proto__" as a property name');
+			}
 			try {
 				return ajv.compile(normalized.value.schema);
-			} catch {
-				throw new SchemaInvalidError('The schema could not be compiled');
+			} catch (error) {
+				throw new SchemaInvalidError(
+					error instanceof Error && error.message !== ''
+						? error.message
+						: 'The schema could not be compiled',
+				);
 			}
 		})();
 		cache.set(key, pending);
@@ -118,13 +182,24 @@ export function createValidator(options: CreateValidatorOptions): Validator {
 			if (valid) {
 				return { status: 'valid', valid: true, action, issues: [], warnings: [] };
 			}
-			return {
-				status: 'invalid-payload',
-				valid: false,
-				action,
-				issues: toValidationIssues(validate.errors, payload),
-				warnings: [],
-			};
+			try {
+				return {
+					status: 'invalid-payload',
+					valid: false,
+					action,
+					issues: toValidationIssues(validate.errors, payload),
+					warnings: [],
+				};
+			} catch {
+				// A hostile payload must not turn a validation result into a rejection.
+				return {
+					status: 'invalid-payload',
+					valid: false,
+					action,
+					issues: [],
+					warnings: [],
+				};
+			}
 		},
 	};
 }

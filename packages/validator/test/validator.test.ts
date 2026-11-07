@@ -118,6 +118,59 @@ describe('createValidator', () => {
 		expect(result.issues[0]?.message).toContain('object or a boolean');
 	});
 
+	it('rejects a module namespace returned by the registry', async () => {
+		const moduleNamespace = {
+			default: { type: 'object', required: ['id'] },
+			[Symbol.toStringTag]: 'Module',
+		};
+		const esModuleWrapper = { __esModule: true, default: { type: 'object' } };
+
+		for (const schema of [moduleNamespace, esModuleWrapper]) {
+			const validator = createValidator({ version: '2.0.1', schemas: registry(() => schema) });
+			const result = await validator.validatePayload('Heartbeat', 'request', {});
+			expect(result.status).toBe('schema-missing');
+			expect(result.issues[0]).toMatchObject({ code: 'schema-invalid' });
+			expect(result.issues[0]?.message).toContain('module namespace');
+		}
+	});
+
+	it('classifies a schema normalization failure as a schema problem', async () => {
+		const schema = new Proxy(
+			{},
+			{
+				ownKeys: () => {
+					throw new Error('boom');
+				},
+			},
+		);
+		const validator = createValidator({ version: '2.0.1', schemas: registry(() => schema) });
+
+		const result = await validator.validatePayload('Heartbeat', 'request', {});
+		expect(result.status).toBe('schema-missing');
+		expect(result.issues[0]).toMatchObject({ code: 'schema-invalid' });
+		expect(result.issues[0]?.message).toContain('boom');
+	});
+
+	it('uses the version as the default draft', async () => {
+		const validator = createValidator({
+			version: '1.6',
+			schemas: registry(() => ({
+				id: 'urn:example:draft-04',
+				type: 'object',
+				properties: {
+					n: { type: 'number', minimum: 0, exclusiveMinimum: true },
+				},
+			})),
+		});
+
+		expect((await validator.validatePayload('Heartbeat', 'request', { n: 1 })).status).toBe(
+			'valid',
+		);
+		expect((await validator.validatePayload('Heartbeat', 'request', { n: 0 })).status).toBe(
+			'invalid-payload',
+		);
+	});
+
 	it('compiles the strict-mode patterns used by the OCPP schemas', async () => {
 		const validator = createValidator({
 			version: '2.0.1',
@@ -144,10 +197,15 @@ describe('createValidator', () => {
 			schemas: registry(() => ({ type: 'number' })),
 		});
 
-		for (const payload of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
-			expect((await validator.validatePayload('Heartbeat', 'request', payload)).status).toBe(
-				'invalid-payload',
-			);
+		const cases: [number, string][] = [
+			[Number.NaN, 'NaN'],
+			[Number.POSITIVE_INFINITY, 'Infinity'],
+			[Number.NEGATIVE_INFINITY, '-Infinity'],
+		];
+		for (const [payload, received] of cases) {
+			const result = await validator.validatePayload('Heartbeat', 'request', payload);
+			expect(result.status).toBe('invalid-payload');
+			expect(result.issues[0]?.received).toBe(received);
 		}
 	});
 
@@ -170,7 +228,7 @@ describe('createValidator', () => {
 		const result = await validator.validatePayload('Heartbeat', 'request', {});
 		expect(result.status).toBe('schema-missing');
 		expect(result.issues[0]?.code).toBe('schema-invalid');
-		expect(result.issues[0]?.message).toContain('could not be compiled');
+		expect(result.issues[0]?.message).toContain('schema is invalid');
 	});
 
 	it('reports a payload that makes Ajv throw as a schema problem', async () => {
@@ -358,6 +416,27 @@ describe('createValidator', () => {
 		}
 	});
 
+	it('adds the offending name for propertyNames', async () => {
+		const validator = createValidator({
+			version: '2.0.1',
+			schemas: registry(() => ({
+				type: 'object',
+				propertyNames: { pattern: '^[a-z]+$' },
+			})),
+		});
+
+		const result = await validator.validatePayload('Heartbeat', 'request', { Bad: 1 });
+		expect(result.status).toBe('invalid-payload');
+		const issue = result.issues.find((entry) => entry.keyword === 'propertyNames');
+		expect(issue).toMatchObject({
+			path: ['Bad'],
+			pointer: '/Bad',
+			expected: 'a valid property name',
+			received: '1',
+		});
+		expect(issue?.message).toContain('Bad');
+	});
+
 	it('uses payload paths and RFC 6901 pointers', async () => {
 		const validator = createValidator({
 			version: '2.0.1',
@@ -437,6 +516,18 @@ describe('createValidator', () => {
 			path: ['toString'],
 			received: 'missing',
 		});
+	});
+
+	it('rejects schemas that use __proto__ as a property name', async () => {
+		const schema: unknown = JSON.parse(
+			'{"type":"object","properties":{"__proto__":{"type":"string"}}}',
+		);
+		const validator = createValidator({ version: '2.0.1', schemas: registry(() => schema) });
+
+		const result = await validator.validatePayload('Heartbeat', 'request', {});
+		expect(result.status).toBe('schema-missing');
+		expect(result.issues[0]).toMatchObject({ code: 'schema-invalid' });
+		expect(result.issues[0]?.message).toContain('__proto__');
 	});
 
 	it('does not read accessors when describing an issue', async () => {
@@ -555,7 +646,26 @@ describe('createValidator', () => {
 
 		const result = await validator.validatePayload('Heartbeat', 'request', {});
 		expect(result.status).toBe('invalid-payload');
-		expect(result.issues[0]).toMatchObject({ code: 'schema-violation', path: [], pointer: '' });
+		expect(result.issues[0]).toMatchObject({
+			code: 'schema-violation',
+			path: [],
+			pointer: '',
+			message: 'No value is allowed by this schema',
+		});
+		expect(result.issues[0]?.keyword).toBeUndefined();
+	});
+
+	it('does not reject when an issue cannot be described', async () => {
+		const validator = createValidator({
+			version: '2.0.1',
+			schemas: registry(() => false),
+		});
+		const { proxy, revoke } = Proxy.revocable({}, {});
+		revoke();
+
+		const result = await validator.validatePayload('Heartbeat', 'request', proxy);
+		expect(result.status).toBe('invalid-payload');
+		expect(result.issues).toEqual([]);
 	});
 
 	it('works with the registry built by createSchemaRegistry', async () => {

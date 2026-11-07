@@ -94,6 +94,9 @@ function showValue(value: unknown): string {
 	if (value === null) {
 		return 'null';
 	}
+	if (typeof value === 'number' && !Number.isFinite(value)) {
+		return String(value);
+	}
 	if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
 		const text = String(JSON.stringify(value));
 		return text.length > MAX_RECEIVED_LENGTH ? `${text.slice(0, MAX_RECEIVED_LENGTH - 1)}…` : text;
@@ -138,6 +141,10 @@ function propertyName(error: ErrorObject, params: Record<string, unknown>): stri
 		const additional = params['additionalProperty'];
 		return typeof additional === 'string' ? additional : undefined;
 	}
+	if (error.keyword === 'propertyNames') {
+		const property = params['propertyName'];
+		return typeof property === 'string' ? property : undefined;
+	}
 	return undefined;
 }
 
@@ -173,6 +180,8 @@ function expectedFor(error: ErrorObject, params: Record<string, unknown>): strin
 			return `a multiple of ${String(params['multipleOf'])}`;
 		case 'pattern':
 			return `a string matching ${String(params['pattern'])}`;
+		case 'propertyNames':
+			return 'a valid property name';
 		case 'required':
 			return 'required';
 		case 'type':
@@ -191,8 +200,14 @@ function messageFor(error: ErrorObject, property: string | undefined): string {
 	if (error.keyword === 'additionalProperties') {
 		return `The property ${JSON.stringify(String(property))} is not allowed`;
 	}
+	if (error.keyword === 'propertyNames') {
+		return `The property name ${JSON.stringify(String(property))} is not allowed`;
+	}
 	if (error.keyword === 'additionalItems') {
 		return 'The array has more items than allowed';
+	}
+	if (error.keyword === 'false schema') {
+		return 'No value is allowed by this schema';
 	}
 	const expected = expectedFor(error, error.params as Record<string, unknown>);
 	return expected === undefined
@@ -238,12 +253,13 @@ function toIssue(error: ErrorObject, payload: unknown): ValidationIssue {
 	const base = pathFromPointer(error.instancePath, payload);
 	const path = property === undefined ? base : [...base, property];
 	const expected = expectedFor(error, params);
+	const keyword = error.keyword === 'false schema' ? undefined : error.keyword;
 	return {
 		code: 'schema-violation',
 		path,
 		pointer: pointerFromPath(path),
 		message: messageFor(error, property),
-		keyword: error.keyword,
+		...(keyword === undefined ? {} : { keyword }),
 		...(expected === undefined ? {} : { expected }),
 		received: showValue(valueAtPath(payload, path)),
 	};

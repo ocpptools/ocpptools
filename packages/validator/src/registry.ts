@@ -44,8 +44,8 @@ export interface SchemaRegistryOptions {
 	/**
 	 * Provides the schema stored in a file, or a promise of it. It must return
 	 * the schema itself: a dynamic `import()` of a JSON file resolves to a module,
-	 * so use `.then((module) => module.default)`. It may return `undefined` when
-	 * there is no such file.
+	 * so use `.then((module) => module.default)`. A module namespace is rejected
+	 * as an invalid schema. It may return `undefined` when there is no such file.
 	 */
 	readonly load: (fileName: string) => unknown;
 	/**

@@ -50,11 +50,14 @@ Facts that shape the design:
    lists the actions: an action is known when the registry has a schema for it.
 5. **Schemas are prepared and compiled on first use.** Each schema is
    normalized with `normalizeSchema` (unknown keywords removed) and compiled the
-   first time its action and kind are needed. Ajv resolves `$ref` inside the
-   schema itself. Compilation is cached per action and kind, including while it
-   is in progress. `addUsedSchema` is off, so compiled schemas are not registered
-   by `$id`; each schema must be self-contained, and a `$ref` to another supplied
-   schema by `$id` is not supported.
+   first time its action and kind are needed. A schema without `$schema` uses
+   draft-04 for 1.6J and draft-06 for 2.0.1. A module namespace returned by the
+   registry is rejected instead of being treated as a schema, and a schema that
+   uses `__proto__` as a property name is rejected. Ajv resolves
+   `$ref` inside the schema itself. Compilation is cached per action and kind,
+   including while it is in progress. `addUsedSchema` is off, so compiled
+   schemas are not registered by `$id`; each schema must be self-contained, and
+   a `$ref` to another supplied schema by `$id` is not supported.
 6. **Ajv configuration.** `allErrors` is on, so every problem is reported.
    `strictSchema` is off, because of the `additionalItems` pattern above. The
    other strict checks keep their default log mode, and `logger` is off. Formats
@@ -68,9 +71,11 @@ Facts that shape the design:
    `invalid-payload`, with a list of issues and a list of warnings. An issue has
    a path as segments (a string for a property, a number for an index), a JSON
    pointer, a message written by this package, the JSON Schema keyword when
-   there is one, and short `expected` and `received` texts. Ajv's error objects
-   and messages are not exposed, so an Ajv upgrade does not change results.
-   `received` is truncated so a large payload does not end up in the result.
+   there is one, and short `expected` and `received` texts. Payload validation
+   messages are written by this package. A schema compilation failure includes a
+   short reason from Ajv, which can change between Ajv releases; Ajv error
+   objects are not exposed. `received` is truncated so a large payload does not
+   end up in the result.
 8. **One validator per OCPP version.** Each has its own Ajv instance and cache.
 9. **A CALLRESULT needs its request.** A CALLRESULT does not name its action, so
    `validateFrame` takes the action of the request as an option. Without it, the
