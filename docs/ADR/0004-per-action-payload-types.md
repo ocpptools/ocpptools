@@ -1,7 +1,10 @@
 # 0004. Per-action payload types
 
-- Status: accepted
+- Status: superseded in part by 0006
 - Date: 2026-11-02
+
+Point 5 is superseded for `@ocpptools/simulator` by
+[ADR 0006](0006-simulator-conventions.md).
 
 ## Context
 
