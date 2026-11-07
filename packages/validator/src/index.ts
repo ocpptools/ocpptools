@@ -14,5 +14,6 @@ export type {
 	ValidationIssueCode,
 	ValidationResult,
 	ValidationStatus,
+	ValidateFrameOptions,
 	Validator,
 } from './types.js';

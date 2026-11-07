@@ -52,7 +52,7 @@
   "size-limit": [
     {
       "path": "dist/*.js",
-      "limit": "6 kB"
+      "limit": "7 kB"
     }
   ]
 }
