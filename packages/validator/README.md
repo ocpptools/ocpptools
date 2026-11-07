@@ -3,8 +3,8 @@
 Validation of OCPP-J frames and their payloads for OCPP 1.6J and 2.0.1, against
 the OCPP JSON Schemas, with readable errors.
 
-> **Status:** private alpha. This package will be published with `core` and
-> `schema-utils` in the 0.2.0 release. The conventions it follows are
+> **Status:** alpha. This package is published with `core` and `schema-utils`
+> in the 0.2.0 release. The conventions it follows are
 > in [ADR 0005](https://github.com/ocpptools/ocpptools/blob/main/docs/ADR/0005-validator-conventions.md).
 
 It uses Ajv and `ajv-formats`, receives its schemas from a registry you provide,

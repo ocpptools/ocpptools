@@ -24,14 +24,14 @@ and message construction for OCPP 1.6J and 2.0.1.
 
 ## Packages
 
-| Package                   | Status        | Purpose                                                            |
-| ------------------------- | ------------- | ------------------------------------------------------------------ |
-| `@ocpptools/core`         | Alpha         | OCPP types, frames, parser/serializer, transport interfaces        |
-| `@ocpptools/schema-utils` | Private alpha | JSON Schema normalization and field metadata                       |
-| `@ocpptools/validator`    | Private alpha | Ajv-based validation with an injectable schema registry            |
-| `@ocpptools/simulator`    | Planned       | Headless charging-station simulator with injectable transports     |
-| `@ocpptools/builder`      | Planned       | Headless payload and frame construction                            |
-| `@ocpptools/schemas`      | Alpha         | Unmodified OCA JSON Schemas (CC BY-ND 4.0, © Open Charge Alliance) |
+| Package                   | Status  | Purpose                                                            |
+| ------------------------- | ------- | ------------------------------------------------------------------ |
+| `@ocpptools/core`         | Alpha   | OCPP types, frames, parser/serializer, transport interfaces        |
+| `@ocpptools/schema-utils` | Alpha   | JSON Schema normalization and field metadata                       |
+| `@ocpptools/validator`    | Alpha   | Ajv-based validation with an injectable schema registry            |
+| `@ocpptools/simulator`    | Planned | Headless charging-station simulator with injectable transports     |
+| `@ocpptools/builder`      | Planned | Headless payload and frame construction                            |
+| `@ocpptools/schemas`      | Alpha   | Unmodified OCA JSON Schemas (CC BY-ND 4.0, © Open Charge Alliance) |
 
 The build order is `core` → `schema-utils` / schemas decision → `validator` →
 `simulator` → `builder`. Optional packages such as `@ocpptools/testing`,
@@ -52,7 +52,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the individual steps.
 
 - One package per capability, not per website tool.
 - No DOM, UI framework, or Tailwind in published packages.
-- Public packages must be consumed by a real consumer before release.
+- A stable release needs a real consumer; alpha packages may ship first.
 - Apache-2.0 for code and documentation. DCO, no CLA.
 - The OCPP schemas are the Open Charge Alliance's. Only unmodified copies of
   the originals are kept, in one package, with their license and attribution.
