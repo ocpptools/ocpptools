@@ -19,6 +19,7 @@
   },
   "scripts": {
     "build": "tsc -b tsconfig.json",
+    "bundle:check": "node scripts/bundle-check.mjs",
     "clean": "tsc -b --clean tsconfig.json",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
@@ -35,7 +36,7 @@
     "lint:ai-files": "node scripts/check-no-ai-files.mjs",
     "lint:schemas": "node scripts/check-no-oca-schemas.mjs && node scripts/check-verbatim-schemas.mjs",
     "lint:licenses": "reuse lint",
-    "verify": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm typecheck:test && pnpm test:coverage && pnpm build && pnpm lint:packages && pnpm test:pack && pnpm size && pnpm lint:ai-files && pnpm lint:schemas && pnpm lint:licenses",
+    "verify": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm typecheck:test && pnpm test:coverage && pnpm build && pnpm bundle:check && pnpm lint:packages && pnpm test:pack && pnpm size && pnpm lint:ai-files && pnpm lint:schemas && pnpm lint:licenses",
     "docs:api": "typedoc",
     "size": "pnpm -r --filter @ocpptools/* --if-present run size"
   },
@@ -43,9 +44,11 @@
     "@arethetypeswrong/cli": "^0.18",
     "@changesets/cli": "^3",
     "@eslint/js": "^10",
+    "@size-limit/esbuild": "^14.3.0",
     "@size-limit/file": "^14.3.0",
     "@types/node": "^26",
     "@vitest/coverage-v8": "^4.1.12",
+    "esbuild": "^0.28.2",
     "eslint": "^10",
     "eslint-config-prettier": "^10",
     "globals": "^17",

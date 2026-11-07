@@ -25,7 +25,13 @@ export default tseslint.config(
 		languageOptions: {
 			parserOptions: {
 				projectService: {
-					allowDefaultProject: ['*.config.*', '*.config.mjs', '*.config.ts', 'scripts/*.mjs'],
+					allowDefaultProject: [
+						'*.config.*',
+						'*.config.mjs',
+						'*.config.ts',
+						'packages/*/.size-limit.mjs',
+						'scripts/*.mjs',
+					],
 				},
 				tsconfigRootDir: import.meta.dirname,
 			},
@@ -62,6 +68,7 @@ export default tseslint.config(
 			'**/*.config.*',
 			'**/*.config.mjs',
 			'**/*.config.ts',
+			'**/.size-limit.mjs',
 			'scripts/**/*.mjs',
 			'scripts/**/*.ts',
 		],
