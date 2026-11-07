@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Rodolfo Carrillo
 
-import type { FrameIssueCode, MessageId, MessageType } from '@ocpptools/core';
+import type { FrameIssueCode, MessageId, MessageType, OcppVersion } from '@ocpptools/core';
 
 /** Which schema of an action to use: the one of the CALL or the one of its CALLRESULT. */
 export type PayloadKind = 'request' | 'response';
@@ -59,7 +59,10 @@ interface ValidationResultBase {
 	readonly messageId?: MessageId;
 	/** The action that was checked, when there is one. */
 	readonly action?: string;
-	/** Everything that makes the input invalid. Empty when `valid` is true. */
+	/**
+	 * Everything that makes the input invalid. Empty when `valid` is true, and
+	 * when the status alone explains the failure, such as `unknown-action`.
+	 */
 	readonly issues: readonly ValidationIssue[];
 	/** Things worth knowing that do not make the input invalid. */
 	readonly warnings: readonly ValidationIssue[];
@@ -87,4 +90,16 @@ export type ValidationResult = ValidResult | InvalidResult;
  */
 export interface SchemaRegistry {
 	get(action: string, kind: PayloadKind): unknown;
+}
+
+/** What `createValidator` needs: one OCPP version and where its schemas come from. */
+export interface CreateValidatorOptions {
+	readonly version: OcppVersion;
+	readonly schemas: SchemaRegistry;
+}
+
+/** Validates values for one OCPP version. */
+export interface Validator {
+	readonly version: OcppVersion;
+	validatePayload(action: string, kind: PayloadKind, payload: unknown): Promise<ValidationResult>;
 }
