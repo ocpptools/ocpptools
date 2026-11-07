@@ -110,10 +110,11 @@ messages.
 The release flow is:
 
 1. A change merges to `main` with a changeset when a public package changes.
-2. Changesets opens a release pull request.
-3. The release pull request is merged.
-4. CI publishes packages with OIDC and provenance.
-5. Tags are created in the package format, for example `@ocpptools/core@0.1.0`.
+2. A maintainer runs the manual Release workflow; Changesets opens a version
+   pull request.
+3. The version pull request is merged.
+4. The workflow runs again and publishes packages with OIDC and provenance.
+5. Tags are created in the package format, for example `@ocpptools/core@0.1.1`.
 
 Publishing is CI-only. Maintainers do not publish from local machines. Tags are
 immutable and protected.

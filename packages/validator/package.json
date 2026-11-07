@@ -1,7 +1,6 @@
 {
   "name": "@ocpptools/validator",
   "version": "0.0.0",
-  "private": true,
   "type": "module",
   "description": "Validation of OCPP-J frames and payloads against the OCPP JSON Schemas, with readable errors.",
   "license": "Apache-2.0",
