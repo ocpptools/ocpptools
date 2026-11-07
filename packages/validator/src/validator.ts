@@ -21,9 +21,15 @@ class SchemaInvalidError extends Error {
 }
 
 function loadFailureMessage(action: string, kind: PayloadKind, error: unknown): string {
-	return error instanceof SchemaLoadError
-		? error.message
-		: `Could not load the schema for ${action} (${kind})`;
+	if (error instanceof SchemaLoadError) {
+		const cause = error.cause;
+		const detail = cause instanceof Error && cause.message !== '' ? `: ${cause.message}` : '';
+		return `${error.message}${detail}`;
+	}
+	if (error instanceof Error && error.message !== '') {
+		return `Could not load the schema for ${action} (${kind}): ${error.message}`;
+	}
+	return `Could not load the schema for ${action} (${kind})`;
 }
 
 function schemaMissing(action: string, kind: PayloadKind, error: unknown): ValidationResult {

@@ -44,19 +44,25 @@ Facts that shape the design:
    `get(action, kind)` with a schema, `undefined`, or a promise of either. A
    helper builds one from a `load(fileName)` function and the file naming of the
    official packages (1.6J: `Action.json` and `ActionResponse.json`; 2.0.1:
-   `ActionRequest.json` and `ActionResponse.json`). Nothing in the package lists
-   the actions: an action is known when the registry has a schema for it.
+   `ActionRequest.json` and `ActionResponse.json`). The caller may also pass the
+   file names that exist, so an unknown action is distinguished from a failed
+   load without the package holding a list of actions. Nothing in the package
+   lists the actions: an action is known when the registry has a schema for it.
 5. **Schemas are prepared and compiled on first use.** Each schema is
    normalized with `normalizeSchema` (unknown keywords removed) and compiled the
-   first time its action and kind are needed. Ajv resolves `$ref` itself.
-   Compilation is cached per action and kind, including while it is in
-   progress, and a schema `$id` is registered at most once.
+   first time its action and kind are needed. Ajv resolves `$ref` inside the
+   schema itself. Compilation is cached per action and kind, including while it
+   is in progress. `addUsedSchema` is off, so compiled schemas are not registered
+   by `$id`; each schema must be self-contained, and a `$ref` to another supplied
+   schema by `$id` is not supported.
 6. **Ajv configuration.** `allErrors` is on, so every problem is reported.
-   `strictSchema` is off, because of the `additionalItems` pattern above; the
-   other strict checks stay on. Formats come from `ajv-formats`. The validator
-   never coerces types or inserts defaults: validating does not change data.
-   The `new Function` limitation is documented, and precompiled validators are
-   left for later.
+   `strictSchema` is off, because of the `additionalItems` pattern above. The
+   other strict checks keep their default log mode, and `logger` is off. Formats
+   come from `ajv-formats`. `multipleOfPrecision` is `6`, so decimal
+   `multipleOf` values are not rejected by floating point error. Only own
+   properties count. The validator never coerces types or inserts defaults:
+   validating does not change data. The `new Function` limitation is documented,
+   and precompiled validators are left for later.
 7. **Results are a stable model of the package's own.** A result is one of
    `valid`, `invalid-frame`, `unknown-action`, `schema-missing`, or
    `invalid-payload`, with a list of issues and a list of warnings. An issue has
@@ -90,5 +96,7 @@ Facts that shape the design:
   validator's.
 - Every message of both versions is tested against the official schemas,
   read from `@ocpptools/schemas` at test time and never copied into the tests.
+- A schema that references another supplied schema by `$id` is not supported:
+  each schema must be self-contained.
 - Out of scope: schemas bundled in the package, generated payload types,
   OCPP 2.1, and validation of a CALLRESULT without its request.

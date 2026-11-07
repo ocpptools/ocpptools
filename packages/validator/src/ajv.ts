@@ -11,8 +11,9 @@ const addFormats = addFormatsModule as unknown as (ajv: Ajv) => Ajv;
  * OCPP 2.0.1 schemas use `additionalItems` next to a single `items` schema. The
  * other strict checks keep their defaults: they log through `logger`, which is
  * off, so the OCPP schemas compile. `multipleOfPrecision` keeps decimal
- * `multipleOf` values from failing because of floating point. The instance
- * never coerces values or inserts defaults.
+ * `multipleOf` values from failing because of floating point. Only own
+ * properties count, so `toString` or `__proto__` cannot satisfy a required
+ * field. The instance never coerces values or inserts defaults.
  */
 export function createAjv(): Ajv {
 	const ajv = new Ajv({
@@ -20,6 +21,7 @@ export function createAjv(): Ajv {
 		allErrors: true,
 		logger: false,
 		multipleOfPrecision: 6,
+		ownProperties: true,
 		strictSchema: false,
 	});
 	addFormats(ajv);

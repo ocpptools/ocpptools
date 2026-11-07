@@ -169,6 +169,15 @@ describe('toValidationIssues', () => {
 		expect(samePath.map((issue) => issue.keyword)).toEqual(['enum', 'type']);
 	});
 
+	it('uses a clear message for additionalItems', () => {
+		const issue = toValidationIssues([error('additionalItems', '', { limit: 1 })], ['a', 'b'])[0];
+		expect(issue).toMatchObject({
+			expected: 'no additional items',
+			message: 'The array has more items than allowed',
+			received: 'array',
+		});
+	});
+
 	it('leaves the message generic for an unknown keyword', () => {
 		const issue = toValidationIssues([error('not-a-known-keyword')], {})[0];
 		expect(issue?.message).toBe('The value does not satisfy the "not-a-known-keyword" rule');

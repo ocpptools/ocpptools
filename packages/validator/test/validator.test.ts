@@ -90,6 +90,7 @@ describe('createValidator', () => {
 		expect(result.valid).toBe(false);
 		expect(result.issues).toHaveLength(1);
 		expect(result.issues[0]).toMatchObject({ code: 'schema-load-failed', path: [], pointer: '' });
+		expect(result.issues[0]?.message).toContain('network down');
 	});
 
 	it('treats a registry that throws as a failed load', async () => {
@@ -330,6 +331,13 @@ describe('createValidator', () => {
 			['minItems', { type: 'array', minItems: 1 }, [], 'at least 1 item', 'array'],
 			['maxItems', { type: 'array', maxItems: 1 }, [1, 2], 'at most 1 item', 'array'],
 			[
+				'additionalItems',
+				{ type: 'array', items: [{ type: 'string' }], additionalItems: false },
+				['a', 'b'],
+				'no additional items',
+				'array',
+			],
+			[
 				'uniqueItems',
 				{ type: 'array', uniqueItems: true },
 				[1, 1],
@@ -410,6 +418,50 @@ describe('createValidator', () => {
 			received: 'missing',
 		});
 		expect(result.issues[0]?.message).toContain('required');
+	});
+
+	it('does not treat inherited properties as present', async () => {
+		const validator = createValidator({
+			version: '2.0.1',
+			schemas: registry(() => ({
+				type: 'object',
+				required: ['toString'],
+				properties: { toString: { type: 'string' } },
+			})),
+		});
+
+		const result = await validator.validatePayload('Heartbeat', 'request', {});
+		expect(result.status).toBe('invalid-payload');
+		expect(result.issues[0]).toMatchObject({
+			keyword: 'required',
+			path: ['toString'],
+			received: 'missing',
+		});
+	});
+
+	it('does not read accessors when describing an issue', async () => {
+		const validator = createValidator({
+			version: '2.0.1',
+			schemas: registry(() => ({
+				type: 'object',
+				properties: {},
+				additionalProperties: false,
+			})),
+		});
+		const payload = Object.defineProperty({}, 'extra', {
+			enumerable: true,
+			get: () => {
+				throw new Error('do not read');
+			},
+		});
+
+		const result = await validator.validatePayload('Heartbeat', 'request', payload);
+		expect(result.status).toBe('invalid-payload');
+		expect(result.issues[0]).toMatchObject({
+			keyword: 'additionalProperties',
+			path: ['extra'],
+			received: 'missing',
+		});
 	});
 
 	it('adds the extra property to an additionalProperties error', async () => {

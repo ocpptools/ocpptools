@@ -13,6 +13,33 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Reads an own data property without invoking a getter. Inherited properties
+ * and accessors are treated as missing, so describing an issue never runs user
+ * code.
+ */
+function ownValue(container: unknown, segment: PathSegment): unknown {
+	try {
+		if (Array.isArray(container) && typeof segment === 'number') {
+			if (!Object.hasOwn(container, segment)) {
+				return undefined;
+			}
+			const descriptor = Object.getOwnPropertyDescriptor(container, segment);
+			return descriptor !== undefined && 'value' in descriptor ? descriptor.value : undefined;
+		}
+		if (isJsonObject(container) && typeof segment === 'string') {
+			if (!Object.hasOwn(container, segment)) {
+				return undefined;
+			}
+			const descriptor = Object.getOwnPropertyDescriptor(container, segment);
+			return descriptor !== undefined && 'value' in descriptor ? descriptor.value : undefined;
+		}
+	} catch {
+		return undefined;
+	}
+	return undefined;
+}
+
 function decodeSegment(segment: string): string {
 	return segment.replace(/~1/g, '/').replace(/~0/g, '~');
 }
@@ -32,10 +59,10 @@ function pathFromPointer(pointer: string, payload: unknown): PathSegment[] {
 		if (Array.isArray(current)) {
 			const index = Number(decoded);
 			path.push(index);
-			current = current[index];
+			current = ownValue(current, index);
 		} else {
 			path.push(decoded);
-			current = isJsonObject(current) ? current[decoded] : undefined;
+			current = isJsonObject(current) ? ownValue(current, decoded) : undefined;
 		}
 	}
 	return path;
@@ -49,9 +76,9 @@ function valueAtPath(payload: unknown, path: readonly PathSegment[]): unknown {
 	let current = payload;
 	for (const segment of path) {
 		if (Array.isArray(current) && typeof segment === 'number') {
-			current = current[segment];
+			current = ownValue(current, segment);
 		} else if (isJsonObject(current) && typeof segment === 'string') {
-			current = current[segment];
+			current = ownValue(current, segment);
 		} else {
 			return undefined;
 		}
@@ -163,6 +190,9 @@ function messageFor(error: ErrorObject, property: string | undefined): string {
 	}
 	if (error.keyword === 'additionalProperties') {
 		return `The property ${JSON.stringify(String(property))} is not allowed`;
+	}
+	if (error.keyword === 'additionalItems') {
+		return 'The array has more items than allowed';
 	}
 	const expected = expectedFor(error, error.params as Record<string, unknown>);
 	return expected === undefined
