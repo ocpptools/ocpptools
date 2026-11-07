@@ -190,11 +190,60 @@ assert.ok(license.startsWith('Attribution-NoDerivatives 4.0 International'));
 		directory: 'validator',
 		name: '@ocpptools/validator',
 		workspaceDependencies: ['core', 'schema-utils'],
-		exports: ['SchemaLoadError', 'createSchemaRegistry', 'schemaFileName'],
+		exports: ['SchemaLoadError', 'createSchemaRegistry', 'createValidator', 'schemaFileName'],
 		behavior: `
 assert.equal(pkg.schemaFileName('1.6', 'Heartbeat', 'request'), 'Heartbeat.json');
 assert.equal(pkg.schemaFileName('2.0.1', 'Heartbeat', 'request'), 'HeartbeatRequest.json');
 assert.equal(pkg.schemaFileName('2.0.1', '../x', 'response'), undefined);
+const validator = pkg.createValidator({
+	version: '2.0.1',
+	schemas: {
+		get: (action, kind) =>
+			action === 'Heartbeat' && kind === 'request'
+				? {
+						type: 'object',
+						required: ['currentTime'],
+						properties: { currentTime: { type: 'string', format: 'date-time' } },
+					}
+				: undefined,
+	},
+});
+assert.equal(validator.version, '2.0.1');
+const accepted = await validator.validatePayload('Heartbeat', 'request', {
+	currentTime: '2026-01-01T00:00:00Z',
+});
+assert.equal(accepted.status, 'valid');
+const rejected = await validator.validatePayload('Heartbeat', 'request', { currentTime: 1 });
+assert.equal(rejected.status, 'invalid-payload');
+assert.equal(rejected.issues[0].keyword, 'type');
+assert.equal((await validator.validatePayload('Nope', 'request', {})).status, 'unknown-action');
+const unavailable = pkg.createValidator({
+	version: '1.6',
+	schemas: {
+		get: () => {
+			throw new Error('boom');
+		},
+	},
+});
+const failed = await unavailable.validatePayload('Heartbeat', 'request', {});
+assert.equal(failed.status, 'schema-missing');
+assert.equal(failed.issues[0].code, 'schema-load-failed');
+const broken = pkg.createValidator({
+	version: '2.0.1',
+	schemas: { get: () => null },
+});
+const invalidSchema = await broken.validatePayload('Heartbeat', 'request', {});
+assert.equal(invalidSchema.status, 'schema-missing');
+assert.equal(invalidSchema.issues[0].code, 'schema-invalid');
+const moduleLike = pkg.createValidator({
+	version: '2.0.1',
+	schemas: {
+		get: () => ({ [Symbol.toStringTag]: 'Module', default: { type: 'object' } }),
+	},
+});
+const moduleResult = await moduleLike.validatePayload('Heartbeat', 'request', {});
+assert.equal(moduleResult.status, 'schema-missing');
+assert.equal(moduleResult.issues[0].code, 'schema-invalid');
 const loaded = [];
 const registry = pkg.createSchemaRegistry({
 	version: '2.0.1',
