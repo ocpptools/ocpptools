@@ -1,0 +1,12 @@
+{
+  "extends": "@ocpptools/tsconfig/library.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "../../.cache/tsconfig/simulator.tsbuildinfo",
+    "types": []
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/browser", "test", "dist", "coverage"],
+  "references": [{ "path": "../core/tsconfig.build.json" }]
+}

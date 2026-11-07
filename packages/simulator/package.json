@@ -1,0 +1,60 @@
+{
+  "name": "@ocpptools/simulator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Headless OCPP 1.6J and 2.0.1 charge point simulator with injectable transports, clock, and storage.",
+  "license": "Apache-2.0",
+  "author": "Rodolfo Carrillo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ocpptools/ocpptools.git",
+    "directory": "packages/simulator"
+  },
+  "bugs": "https://github.com/ocpptools/ocpptools/issues",
+  "homepage": "https://github.com/ocpptools/ocpptools",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./1.6": {
+      "types": "./dist/1.6.d.ts",
+      "import": "./dist/1.6.js"
+    },
+    "./2.0.1": {
+      "types": "./dist/2.0.1.d.ts",
+      "import": "./dist/2.0.1.js"
+    },
+    "./browser": {
+      "types": "./dist/browser/index.d.ts",
+      "import": "./dist/browser/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "NOTICE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json tsconfig.browser.json",
+    "clean": "tsc -b --clean tsconfig.build.json tsconfig.browser.json",
+    "typecheck:test": "tsc --noEmit -p tsconfig.json",
+    "lint:package": "publint && attw --pack . --profile esm-only",
+    "prepack": "node ../../scripts/sync-license.mjs copy",
+    "size": "size-limit"
+  },
+  "dependencies": {
+    "@ocpptools/core": "workspace:^"
+  },
+  "devDependencies": {
+    "@ocpptools/tsconfig": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

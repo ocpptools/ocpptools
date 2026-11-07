@@ -319,6 +319,40 @@ const schemaUtils = await import(pathToFileURL(join(schemaUtilsDirectory, 'dist/
 assert.equal(typeof schemaUtils.normalizeSchema, 'function');
 `,
 	},
+	{
+		directory: 'simulator',
+		name: '@ocpptools/simulator',
+		workspaceDependencies: ['core'],
+		exports: ['SIMULATOR_NAME'],
+		requiredFiles: [
+			'package.json',
+			'README.md',
+			'LICENSE',
+			'NOTICE',
+			'dist/index.js',
+			'dist/index.d.ts',
+			'dist/1.6.js',
+			'dist/1.6.d.ts',
+			'dist/2.0.1.js',
+			'dist/2.0.1.d.ts',
+			'dist/browser/index.js',
+			'dist/browser/index.d.ts',
+		],
+		behavior: `
+assert.equal(pkg.SIMULATOR_NAME, '@ocpptools/simulator');
+const s16 = await import('@ocpptools/simulator/1.6');
+const s201 = await import('@ocpptools/simulator/2.0.1');
+const browser = await import('@ocpptools/simulator/browser');
+assert.equal(s16.SIMULATOR_PROTOCOL_VERSION, '1.6');
+assert.equal(s201.SIMULATOR_PROTOCOL_VERSION, '2.0.1');
+assert.equal(browser.SIMULATOR_BROWSER_ENTRY, true);
+const { readFileSync } = await import('node:fs');
+const { createRequire } = await import('node:module');
+const require = createRequire(import.meta.url);
+const manifest = JSON.parse(readFileSync(require.resolve('@ocpptools/simulator/package.json'), 'utf8'));
+assert.deepEqual(Object.keys(manifest.exports).sort(), ['.', './1.6', './2.0.1', './browser', './package.json']);
+`,
+	},
 ];
 
 /**

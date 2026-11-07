@@ -77,6 +77,16 @@ importers:
 
   packages/schemas: {}
 
+  packages/simulator:
+    dependencies:
+      '@ocpptools/core':
+        specifier: workspace:^
+        version: link:../core
+    devDependencies:
+      '@ocpptools/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+
   packages/tsconfig: {}
 
   packages/validator:
