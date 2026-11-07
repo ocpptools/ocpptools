@@ -4,9 +4,9 @@ Open-source TypeScript libraries for the Open Charge Point Protocol (OCPP):
 frame parsing, schema-driven validation, headless charging-station simulation,
 and message construction for OCPP 1.6J and 2.0.1.
 
-> **Status:** alpha. `@ocpptools/core` 0.1.1 and `@ocpptools/schemas` 0.1.0 are
-> published on npm; `@ocpptools/schema-utils` and `@ocpptools/validator` are in
-> development. APIs are unstable until 1.0.0.
+> **Status:** alpha. `@ocpptools/core`, `@ocpptools/schema-utils`, and
+> `@ocpptools/validator` 0.2.0 are published on npm, together with
+> `@ocpptools/schemas` 0.1.0. APIs are unstable until 1.0.0.
 
 ## What this repository is
 
