@@ -28,6 +28,12 @@ describe('schemaFileName', () => {
 			expect(schemaFileName('1.6', action, 'response')).toBeUndefined();
 		}
 	});
+
+	it('refuses an action that is not text', () => {
+		for (const action of [42, null, true, undefined]) {
+			expect(schemaFileName('2.0.1', action as unknown as string, 'request')).toBeUndefined();
+		}
+	});
 });
 
 describe('createSchemaRegistry', () => {

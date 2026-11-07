@@ -19,7 +19,7 @@ export function schemaFileName(
 	action: string,
 	kind: PayloadKind,
 ): string | undefined {
-	if (!ACTION.test(action)) {
+	if (typeof action !== 'string' || !ACTION.test(action)) {
 		return undefined;
 	}
 	if (kind === 'response') {

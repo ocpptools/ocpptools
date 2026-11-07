@@ -68,7 +68,7 @@ function pathFromPointer(pointer: string, payload: unknown): PathSegment[] {
 	return path;
 }
 
-function pointerFromPath(path: readonly PathSegment[]): string {
+export function pointerFromPath(path: readonly (string | number)[]): string {
 	return path.length === 0 ? '' : `/${path.map(encodeSegment).join('/')}`;
 }
 

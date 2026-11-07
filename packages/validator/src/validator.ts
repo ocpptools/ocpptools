@@ -3,12 +3,21 @@
 
 import type { ValidateFunction } from 'ajv';
 
+import { MESSAGE_TYPE, inspectFrame } from '@ocpptools/core';
+import type { FrameInspection, FrameIssue, MessageId, MessageType } from '@ocpptools/core';
 import { normalizeSchema } from '@ocpptools/schema-utils';
 
 import { createAjv } from './ajv.js';
-import { schemaIssue, toValidationIssues } from './issues.js';
+import { pointerFromPath, schemaIssue, toValidationIssues } from './issues.js';
 import { SchemaLoadError } from './registry.js';
-import type { CreateValidatorOptions, PayloadKind, ValidationResult, Validator } from './types.js';
+import type {
+	CreateValidatorOptions,
+	PayloadKind,
+	ValidateFrameOptions,
+	ValidationIssue,
+	ValidationResult,
+	Validator,
+} from './types.js';
 
 class SchemaInvalidError extends Error {
 	readonly reason: string;
@@ -87,6 +96,122 @@ function schemaMissing(action: string, kind: PayloadKind, error: unknown): Valid
 	};
 }
 
+function invalidJson(): ValidationResult {
+	return {
+		status: 'invalid-frame',
+		valid: false,
+		issues: [
+			{
+				code: 'invalid-json',
+				path: [],
+				pointer: '',
+				message: 'The input is not valid JSON',
+				expected: 'valid JSON',
+			},
+		],
+		warnings: [],
+	};
+}
+
+function actionFromFrame(frame: unknown): string | undefined {
+	try {
+		if (!Array.isArray(frame)) {
+			return undefined;
+		}
+		const action = (frame as readonly unknown[])[2];
+		return typeof action === 'string' && action !== '' ? action : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+function unreadableFrame(): ValidationResult {
+	return {
+		status: 'invalid-frame',
+		valid: false,
+		issues: [
+			{
+				code: 'not-array',
+				path: [],
+				pointer: '',
+				message: 'The frame could not be read as a JSON array',
+				expected: 'array',
+				received: 'unreadable value',
+			},
+		],
+		warnings: [],
+	};
+}
+
+function toFrameIssue(issue: FrameIssue): ValidationIssue {
+	return {
+		code: issue.code,
+		path: issue.path,
+		pointer: pointerFromPath(issue.path),
+		message: issue.message,
+		expected: issue.expected,
+		received: issue.received,
+	};
+}
+
+function frameWarnings(inspection: FrameInspection): ValidationIssue[] {
+	return inspection.issues
+		.filter((issue) => issue.severity === 'warning')
+		.map((issue) => toFrameIssue(issue));
+}
+
+function frameErrors(inspection: FrameInspection): ValidationIssue[] {
+	return inspection.issues
+		.filter((issue) => issue.severity === 'error')
+		.map((issue) => toFrameIssue(issue));
+}
+
+function identityFor(inspection: FrameInspection): {
+	messageType?: MessageType;
+	messageId?: MessageId;
+} {
+	return {
+		...(inspection.messageType === undefined ? {} : { messageType: inspection.messageType }),
+		...(inspection.messageId === undefined ? {} : { messageId: inspection.messageId }),
+	};
+}
+
+function prefixIssue(issue: ValidationIssue, prefix: 2 | 3): ValidationIssue {
+	if (issue.code !== 'schema-violation') {
+		return issue;
+	}
+	const path = [prefix, ...issue.path];
+	return { ...issue, path, pointer: pointerFromPath(path) };
+}
+
+function mergePayloadResult(
+	result: ValidationResult,
+	prefix: 2 | 3,
+	identity: { messageType?: MessageType; messageId?: MessageId },
+	warnings: readonly ValidationIssue[],
+): ValidationResult {
+	const mergedWarnings = [...warnings, ...result.warnings];
+	if (result.status === 'valid') {
+		return { ...result, ...identity, warnings: mergedWarnings };
+	}
+	return {
+		...result,
+		...identity,
+		issues: result.issues.map((issue) => prefixIssue(issue, prefix)),
+		warnings: mergedWarnings,
+	};
+}
+
+function uncheckedResult(): ValidationIssue {
+	return {
+		code: 'unchecked-result',
+		path: [2],
+		pointer: '/2',
+		message:
+			'The CALLRESULT payload was not checked: pass the request action as requestAction to check it',
+	};
+}
+
 /**
  * Creates a validator for one OCPP version. Schemas are loaded and compiled on
  * first use, and a failed load or compilation is not cached, so the next call
@@ -151,55 +276,148 @@ export function createValidator(options: CreateValidatorOptions): Validator {
 		return pending;
 	};
 
+	const validatePayload = async (
+		action: string,
+		kind: PayloadKind,
+		payload: unknown,
+	): Promise<ValidationResult> => {
+		let validate: ValidateFunction | undefined;
+		try {
+			validate = await compile(action, kind);
+		} catch (error) {
+			return schemaMissing(action, kind, error);
+		}
+		if (validate === undefined) {
+			return {
+				status: 'unknown-action',
+				valid: false,
+				action,
+				issues: [],
+				warnings: [],
+			};
+		}
+		let valid: boolean;
+		try {
+			valid = validate(payload);
+		} catch {
+			return schemaMissing(
+				action,
+				kind,
+				new SchemaInvalidError('The schema could not validate the payload'),
+			);
+		}
+		if (valid) {
+			return { status: 'valid', valid: true, action, issues: [], warnings: [] };
+		}
+		try {
+			return {
+				status: 'invalid-payload',
+				valid: false,
+				action,
+				issues: toValidationIssues(validate.errors, payload),
+				warnings: [],
+			};
+		} catch {
+			// A hostile payload must not turn a validation result into a rejection.
+			return {
+				status: 'invalid-payload',
+				valid: false,
+				action,
+				issues: [],
+				warnings: [],
+			};
+		}
+	};
+
 	return {
 		version,
-		async validatePayload(action, kind, payload) {
-			let validate: ValidateFunction | undefined;
+		validatePayload,
+		async validateFrame(input, options?: ValidateFrameOptions) {
+			let requestAction: unknown;
 			try {
-				validate = await compile(action, kind);
-			} catch (error) {
-				return schemaMissing(action, kind, error);
-			}
-			if (validate === undefined) {
-				return {
-					status: 'unknown-action',
-					valid: false,
-					action,
-					issues: [],
-					warnings: [],
-				};
-			}
-			let valid: boolean;
-			try {
-				valid = validate(payload);
+				requestAction = options?.requestAction;
 			} catch {
-				return schemaMissing(
-					action,
-					kind,
-					new SchemaInvalidError('The schema could not validate the payload'),
-				);
+				requestAction = undefined;
 			}
-			if (valid) {
-				return { status: 'valid', valid: true, action, issues: [], warnings: [] };
+			let frame: unknown;
+			if (typeof input === 'string') {
+				try {
+					frame = JSON.parse(input) as unknown;
+				} catch {
+					return invalidJson();
+				}
+			} else {
+				frame = input;
 			}
+
+			let inspection: FrameInspection;
 			try {
-				return {
-					status: 'invalid-payload',
-					valid: false,
-					action,
-					issues: toValidationIssues(validate.errors, payload),
-					warnings: [],
-				};
+				inspection = inspectFrame(frame, { version });
 			} catch {
-				// A hostile payload must not turn a validation result into a rejection.
+				return unreadableFrame();
+			}
+
+			const warnings = frameWarnings(inspection);
+			const errors = frameErrors(inspection);
+			const identity = identityFor(inspection);
+			if (errors.length > 0) {
+				const action =
+					inspection.messageType === MESSAGE_TYPE.CALL ? actionFromFrame(frame) : undefined;
 				return {
-					status: 'invalid-payload',
+					status: 'invalid-frame',
 					valid: false,
-					action,
-					issues: [],
-					warnings: [],
+					...identity,
+					...(action === undefined ? {} : { action }),
+					issues: errors,
+					warnings,
 				};
 			}
+
+			const frameArray = frame as readonly unknown[];
+			if (inspection.messageType === MESSAGE_TYPE.CALL) {
+				let action: unknown;
+				let payload: unknown;
+				try {
+					action = frameArray[2];
+					payload = frameArray[3];
+				} catch {
+					return unreadableFrame();
+				}
+				if (typeof action !== 'string' || action === '') {
+					return unreadableFrame();
+				}
+				const result = await validatePayload(action, 'request', payload);
+				return mergePayloadResult(result, 3, identity, warnings);
+			}
+			if (inspection.messageType === MESSAGE_TYPE.CALLRESULT) {
+				let payload: unknown;
+				try {
+					payload = frameArray[2];
+				} catch {
+					return unreadableFrame();
+				}
+				if (typeof requestAction === 'string' && requestAction !== '') {
+					const result = await validatePayload(requestAction, 'response', payload);
+					return mergePayloadResult(result, 2, identity, warnings);
+				}
+				return {
+					status: 'valid',
+					valid: true,
+					...identity,
+					issues: [],
+					warnings: [...warnings, uncheckedResult()],
+				};
+			}
+			if (inspection.messageType === MESSAGE_TYPE.CALLERROR) {
+				return {
+					status: 'valid',
+					valid: true,
+					...identity,
+					issues: [],
+					warnings,
+				};
+			}
+			return unreadableFrame();
 		},
 	};
 }

@@ -11,7 +11,7 @@ export type PayloadKind = 'request' | 'response';
  *
  * - `valid`: nothing is wrong. There can still be warnings.
  * - `invalid-frame`: the text is not JSON, or the frame is not a well-formed OCPP-J frame.
- * - `unknown-action`: the registry has no schema for the action.
+ * - `unknown-action`: the registry has no schema for the action and kind.
  * - `schema-missing`: the action is known, but its schema could not be loaded or used.
  * - `invalid-payload`: the payload does not match the schema.
  */
@@ -25,7 +25,7 @@ export type ValidationStatus =
  * - `invalid-json`: the input text is not valid JSON.
  * - `schema-invalid`: the schema of the action cannot be used, for example Ajv cannot compile it.
  * - `schema-load-failed`: the registry failed to provide the schema.
- * - `unchecked-result`: a CALLRESULT was not checked because its request action is unknown (a warning).
+ * - `unchecked-result`: a CALLRESULT was not checked because no request action was provided (a warning).
  * - `schema-violation`: the payload breaks a rule of the schema; `keyword` says which one.
  */
 export type ValidationIssueCode =
@@ -57,7 +57,7 @@ interface ValidationResultBase {
 	readonly messageType?: MessageType;
 	/** The message ID, when it is a non-empty string. Use it to reply with a CALLERROR. */
 	readonly messageId?: MessageId;
-	/** The action that was checked, when there is one. */
+	/** The action the result refers to, when there is one. */
 	readonly action?: string;
 	/**
 	 * Everything that makes the input invalid. Empty when `valid` is true, and
@@ -68,7 +68,7 @@ interface ValidationResultBase {
 	readonly warnings: readonly ValidationIssue[];
 }
 
-/** The input is valid. */
+/** The input is valid, as far as it was checked. */
 export interface ValidResult extends ValidationResultBase {
 	readonly status: 'valid';
 	readonly valid: true;
@@ -98,8 +98,24 @@ export interface CreateValidatorOptions {
 	readonly schemas: SchemaRegistry;
 }
 
+/** Extra information for a CALLRESULT, whose frame does not name its action. */
+export interface ValidateFrameOptions {
+	/**
+	 * The action of the request this CALLRESULT answers. Only a non-empty string
+	 * counts; an empty or non-string value is treated as absent. Ignored outside
+	 * CALLRESULT.
+	 */
+	readonly requestAction?: string;
+}
+
 /** Validates values for one OCPP version. */
 export interface Validator {
 	readonly version: OcppVersion;
 	validatePayload(action: string, kind: PayloadKind, payload: unknown): Promise<ValidationResult>;
+	/**
+	 * Validates an OCPP frame. A string is parsed as JSON text; any other value is
+	 * treated as an already parsed frame. A CALLRESULT needs `requestAction` to
+	 * check its payload; without it the result is valid with a warning.
+	 */
+	validateFrame(input: unknown, options?: ValidateFrameOptions): Promise<ValidationResult>;
 }

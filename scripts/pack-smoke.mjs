@@ -195,16 +195,28 @@ assert.ok(license.startsWith('Attribution-NoDerivatives 4.0 International'));
 assert.equal(pkg.schemaFileName('1.6', 'Heartbeat', 'request'), 'Heartbeat.json');
 assert.equal(pkg.schemaFileName('2.0.1', 'Heartbeat', 'request'), 'HeartbeatRequest.json');
 assert.equal(pkg.schemaFileName('2.0.1', '../x', 'response'), undefined);
+const requestSchema = {
+	type: 'object',
+	required: ['currentTime'],
+	additionalProperties: false,
+	properties: { currentTime: { type: 'string', format: 'date-time' } },
+};
+const responseSchema = {
+	type: 'object',
+	required: ['status'],
+	additionalProperties: false,
+	properties: { status: { type: 'string' } },
+};
 const validator = pkg.createValidator({
 	version: '2.0.1',
 	schemas: {
 		get: (action, kind) =>
-			action === 'Heartbeat' && kind === 'request'
-				? {
-						type: 'object',
-						required: ['currentTime'],
-						properties: { currentTime: { type: 'string', format: 'date-time' } },
-					}
+			action === 'Heartbeat'
+				? kind === 'request'
+					? requestSchema
+					: kind === 'response'
+						? responseSchema
+						: undefined
 				: undefined,
 	},
 });
@@ -217,6 +229,33 @@ const rejected = await validator.validatePayload('Heartbeat', 'request', { curre
 assert.equal(rejected.status, 'invalid-payload');
 assert.equal(rejected.issues[0].keyword, 'type');
 assert.equal((await validator.validatePayload('Nope', 'request', {})).status, 'unknown-action');
+const call = await validator.validateFrame([
+	2,
+	'id-1',
+	'Heartbeat',
+	{ currentTime: '2026-01-01T00:00:00Z' },
+]);
+assert.equal(call.status, 'valid');
+assert.equal(call.messageType, 2);
+const badCall = await validator.validateFrame([2, 'id-1', 'Heartbeat', { currentTime: 1 }]);
+assert.equal(badCall.status, 'invalid-payload');
+assert.deepEqual(badCall.issues[0].path, [3, 'currentTime']);
+const unchecked = await validator.validateFrame([3, 'id-1', {}]);
+assert.equal(unchecked.status, 'valid');
+assert.equal(unchecked.warnings[0].code, 'unchecked-result');
+const checked = await validator.validateFrame([3, 'id-2', { status: 'ok' }], {
+	requestAction: 'Heartbeat',
+});
+assert.equal(checked.status, 'valid');
+assert.equal(checked.action, 'Heartbeat');
+assert.equal(
+	(await validator.validateFrame([4, 'id-3', 'GenericError', 'text', {}])).status,
+	'valid',
+);
+const badCallError = await validator.validateFrame([4, 'id-4', 'Nope', 'text', {}]);
+assert.equal(badCallError.status, 'invalid-frame');
+assert.equal(badCallError.action, undefined);
+assert.equal((await validator.validateFrame('{')).status, 'invalid-frame');
 const unavailable = pkg.createValidator({
 	version: '1.6',
 	schemas: {

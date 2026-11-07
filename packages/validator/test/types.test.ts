@@ -12,6 +12,8 @@ import type {
 	ValidationIssueCode,
 	ValidationResult,
 	ValidationStatus,
+	ValidateFrameOptions,
+	Validator,
 } from '../src/index.js';
 
 describe('types', () => {
@@ -80,6 +82,16 @@ describe('types', () => {
 		};
 		expectTypeOf(full.path).toEqualTypeOf<readonly (string | number)[]>();
 		expect([minimal.keyword, full.keyword]).toEqual([undefined, 'maxLength']);
+	});
+
+	it('types the frame method and its options', () => {
+		expectTypeOf<ValidateFrameOptions>().toEqualTypeOf<{
+			readonly requestAction?: string;
+		}>();
+		expectTypeOf<Validator['validateFrame']>().parameters.toEqualTypeOf<
+			[input: unknown, options?: ValidateFrameOptions]
+		>();
+		expectTypeOf<Validator['validateFrame']>().returns.toEqualTypeOf<Promise<ValidationResult>>();
 	});
 
 	it('lets a registry answer with a value or a promise', async () => {
