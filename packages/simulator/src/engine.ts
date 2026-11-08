@@ -39,7 +39,7 @@ export interface EngineProfile<S extends object> {
 	readonly version: OcppVersion;
 	readonly subprotocol: OcppSubprotocol;
 	createState(): S;
-	bootPayload(): JsonObject;
+	bootPayload(reason?: string): JsonObject;
 	applyBootResponse(response: JsonObject): BootResponse;
 	register(engine: EngineBase<S>): void;
 	onReady(engine: EngineBase<S>, reason: 'open' | 'boot-accepted'): void | Promise<void>;
@@ -341,22 +341,31 @@ export class EngineBase<S extends object> {
 		return new Date(this.scheduler.now() + this.clockOffsetMs).toISOString();
 	}
 
-	async bootNotification(): Promise<BootResponse> {
+	/**
+	 * Sends BootNotification. A forced boot bypasses the accepted short-circuit
+	 * and is used by TriggerMessage; an in-flight boot is always shared.
+	 */
+	async bootNotification(
+		options: { force?: boolean; reason?: string } = {},
+	): Promise<BootResponse> {
 		this.assertActive();
 		if (!this.connection.isOpen()) {
 			throw new SimulatorError('not-connected', 'The transport is not open');
 		}
-		if (this.boot.status === 'accepted') {
-			return { status: 'Accepted', intervalMs: this.boot.intervalMs };
-		}
 		if (this.bootPromise !== undefined) {
 			return this.bootPromise;
+		}
+		if (options.force !== true && this.boot.status === 'accepted') {
+			return { status: 'Accepted', intervalMs: this.boot.intervalMs };
 		}
 		const session = this.session;
 		this.boot = { status: 'pending' };
 		const promise: Promise<BootResponse> = (async () => {
 			try {
-				const response = await this.rpc.sendCall('BootNotification', this.profile.bootPayload());
+				const response = await this.rpc.sendCall(
+					'BootNotification',
+					this.profile.bootPayload(options.reason ?? 'PowerUp'),
+				);
 				if (session !== this.session || this.disposed) {
 					throw new SimulatorError('disconnected', 'Boot response arrived after reset');
 				}
@@ -474,11 +483,12 @@ export class EngineBase<S extends object> {
 		this.metrics.resetHeartbeat();
 		this.startHeartbeat();
 		try {
+			// Replaying offline events first preserves FIFO: a queued Ended event
+			// must reach the CSMS before the fresh Available status.
+			await this.flushQueue();
 			await this.profile.onReady(this, reason);
 		} catch (error) {
 			this.report(error);
-		} finally {
-			void this.flushQueue();
 		}
 	}
 
