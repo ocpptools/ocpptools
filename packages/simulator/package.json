@@ -51,8 +51,7 @@
 		"@ocpptools/core": "workspace:^"
 	},
 	"devDependencies": {
-		"@ocpptools/tsconfig": "workspace:*",
-		"happy-dom": "^20.0.0"
+		"@ocpptools/tsconfig": "workspace:*"
 	},
 	"publishConfig": {
 		"access": "public"
