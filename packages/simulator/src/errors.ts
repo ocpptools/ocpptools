@@ -6,6 +6,7 @@ import type { JsonObject } from '@ocpptools/core';
 /** Local failures of the simulator, separate from OCPP CALLERROR codes. */
 export type SimulatorErrorCode =
 	| 'not-connected'
+	| 'connection-failed'
 	| 'not-ready'
 	| 'timeout'
 	| 'call-error'

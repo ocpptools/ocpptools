@@ -324,8 +324,10 @@ assert.equal(typeof schemaUtils.normalizeSchema, 'function');
 		name: '@ocpptools/simulator',
 		workspaceDependencies: ['core'],
 		exports: [
+			'Connection',
 			'EventEmitter',
 			'History',
+			'OfflineQueue',
 			'Rpc',
 			'SIMULATOR_NAME',
 			'Scheduler',
