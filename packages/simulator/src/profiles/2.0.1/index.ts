@@ -28,6 +28,15 @@ import {
 	type ServicesState201,
 } from './services.js';
 import {
+	createSecurityHandlers,
+	createSecurityState201,
+	sendGet15118EVCertificate201,
+	sendGetCertificateStatus201,
+	sendSecurityEvent201,
+	sendSignCertificate201,
+	type SecurityState201,
+} from './security.js';
+import {
 	createDeviceModelHandlers,
 	createMonitoringState201,
 	evaluateMonitors201,
@@ -126,6 +135,7 @@ export interface Simulator201State {
 	reservations: Reservation201[];
 	charging: ChargingProfileState201;
 	services: ServicesState201;
+	security: SecurityState201;
 }
 
 export interface Station201Options {
@@ -184,6 +194,7 @@ export function createSimulator201Profile(
 			reservations: [],
 			charging: createChargingProfileState201(),
 			services: createServicesState201(),
+			security: createSecurityState201(),
 		}),
 		bootPayload: (reason = 'PowerUp') => ({
 			chargingStation: {
@@ -778,6 +789,10 @@ function registerInbound(engine: EngineBase<Simulator201State>): void {
 		PublishFirmware: { status: 'Rejected' },
 		UnpublishFirmware: { status: 'NoFirmware' },
 		GetLog: { status: 'Rejected' },
+		InstallCertificate: { status: 'Rejected' },
+		DeleteCertificate: { status: 'Failed' },
+		GetInstalledCertificateIds: { status: 'NotFound' },
+		CertificateSigned: { status: 'Rejected' },
 	};
 	const handlers: Record<string, (context: CallContext) => void | Promise<void>> = {
 		RequestStartTransaction: async (context) => {
@@ -1077,6 +1092,7 @@ function registerInbound(engine: EngineBase<Simulator201State>): void {
 	Object.assign(handlers, createLocalAuthHandlers(engine));
 	Object.assign(handlers, createChargingHandlers(engine));
 	Object.assign(handlers, createServicesHandlers(engine));
+	Object.assign(handlers, createSecurityHandlers(engine));
 
 	for (const [action, handler] of Object.entries(handlers)) {
 		engine.onCall(action, async (context) => {
@@ -1428,6 +1444,29 @@ export class Simulator201 extends EngineBase<Simulator201State> {
 		tbc = false,
 	): Promise<void> {
 		return sendNotifyCustomerInformation201(this, requestId, data, seqNo, tbc);
+	}
+
+	sendSignCertificate(
+		csr: string,
+		certificateType?: 'ChargingStationCertificate' | 'V2GCertificate',
+	): Promise<JsonObject> {
+		return sendSignCertificate201(this, csr, certificateType);
+	}
+
+	sendGet15118EVCertificate(
+		iso15118SchemaVersion: string,
+		action: 'Install' | 'Update',
+		exiRequest: string,
+	): Promise<JsonObject> {
+		return sendGet15118EVCertificate201(this, iso15118SchemaVersion, action, exiRequest);
+	}
+
+	sendGetCertificateStatus(ocspRequestData: JsonObject): Promise<JsonObject> {
+		return sendGetCertificateStatus201(this, ocspRequestData);
+	}
+
+	sendSecurityEvent(type: string, techInfo?: string): Promise<void> {
+		return sendSecurityEvent201(this, type, techInfo);
 	}
 
 	sendNotifyChargingLimit(source: 'EMS' | 'Other' | 'SO' | 'CSO', evseId?: number): Promise<void> {
