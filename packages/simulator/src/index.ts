@@ -5,6 +5,10 @@
 export const SIMULATOR_NAME = '@ocpptools/simulator';
 
 export { Scheduler } from './clock.js';
+export { Connection } from './connection.js';
+export type { ConnectionOptions, ConnectionSnapshot, ReconnectOptions } from './connection.js';
+export { OfflineQueue } from './queue.js';
+export type { FlushResult, QueueOptions, QueueSnapshot, QueuedCall } from './queue.js';
 export {
 	SimulatorCallError,
 	SimulatorError,
@@ -16,6 +20,7 @@ export { EventEmitter } from './events.js';
 export type {
 	BootEvent,
 	ConnectionEvent,
+	ConnectionReason,
 	ConnectionState,
 	ConnectorEvent,
 	ErrorEvent,

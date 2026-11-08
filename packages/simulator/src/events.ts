@@ -12,12 +12,25 @@ export type NoticeLevel = 'info' | 'warning' | 'error' | 'success';
 export type ValidateMode = 'off' | 'warn' | 'block';
 export type InboundResponseMode = 'auto' | 'reject';
 
+export type ConnectionReason =
+	| 'connect'
+	| 'transport-open'
+	| 'transport-close'
+	| 'timeout'
+	| 'transport-error'
+	| 'factory-error'
+	| 'manual'
+	| 'exhausted'
+	| 'disposed';
+
 export interface ConnectionEvent {
 	readonly type: 'connection';
 	readonly at: number;
 	readonly state: ConnectionState;
 	readonly previous: ConnectionState;
 	readonly attempt?: number;
+	readonly reason?: ConnectionReason;
+	readonly retryInMs?: number;
 	readonly close?: TransportCloseEvent;
 }
 
@@ -178,8 +191,9 @@ export type Unsubscribe = () => void;
 
 /**
  * A small typed event emitter. Listener exceptions are isolated: a listener
- * cannot stop the promise settlement or another listener. Async listener
- * rejections are reported as errors too.
+ * cannot stop the promise settlement or another listener. Async rejections from
+ * non-error listeners are reported as errors; failures inside error listeners
+ * are ignored to avoid an infinite report loop.
  */
 export class EventEmitter {
 	private readonly listeners = new Map<
@@ -218,16 +232,20 @@ export class EventEmitter {
 		}
 		const typed = this.listeners.get(event.type);
 		const listeners = [...(typed ?? []), ...this.anyListeners];
+		const reportListenerError = (error: unknown): void => {
+			// Reporting a failing error listener would recurse forever.
+			if (event.type !== 'error') {
+				this.report(error);
+			}
+		};
 		for (const listener of listeners) {
 			try {
 				const result = listener(event) as unknown;
 				if (isThenable(result)) {
-					void Promise.resolve(result).catch((error: unknown) => {
-						this.report(error);
-					});
+					void Promise.resolve(result).catch(reportListenerError);
 				}
 			} catch (error) {
-				this.report(error);
+				reportListenerError(error);
 			}
 		}
 	}
