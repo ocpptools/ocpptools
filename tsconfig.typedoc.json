@@ -2,6 +2,7 @@
   "extends": "./packages/tsconfig/library.json",
   "compilerOptions": {
     "noEmit": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "composite": false,
     "incremental": false,
     "types": []
@@ -11,6 +12,5 @@
     "packages/schema-utils/src/**/*.ts",
     "packages/validator/src/**/*.ts",
     "packages/simulator/src/**/*.ts"
-  ],
-  "exclude": ["packages/simulator/src/browser/**/*.ts"]
+  ]
 }
