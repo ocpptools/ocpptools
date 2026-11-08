@@ -39,6 +39,26 @@ export interface NetworkProfile201 {
 	updatedAt: number;
 }
 
+/** Builds the OCPP characteristics for a scalar simulated variable value. */
+export function variableCharacteristics201(value: string): JsonObject {
+	const trimmed = value.trim();
+	const numeric = trimmed === '' ? Number.NaN : Number(trimmed);
+	let dataType: string;
+	if (value === 'true' || value === 'false') {
+		dataType = 'boolean';
+	} else if (Number.isInteger(numeric)) {
+		dataType = 'integer';
+	} else if (Number.isFinite(numeric)) {
+		dataType = 'decimal';
+	} else {
+		dataType = 'string';
+	}
+	return {
+		dataType,
+		supportsMonitoring: dataType === 'integer' || dataType === 'decimal',
+	};
+}
+
 export function createMonitoringState201(): MonitoringState201 {
 	return {
 		base: 'All',
@@ -550,15 +570,11 @@ function reportDataFor(
 		) {
 			continue;
 		}
-		const boolean = value === 'true' || value === 'false';
 		reportData.push({
 			component,
 			variable,
 			variableAttribute: [{ type: 'Actual', value, mutability: 'ReadWrite' }],
-			variableCharacteristics: {
-				dataType: boolean ? 'boolean' : 'string',
-				supportsMonitoring: !boolean && Number.isFinite(Number(value)),
-			},
+			variableCharacteristics: variableCharacteristics201(value),
 		});
 	}
 	return reportData;

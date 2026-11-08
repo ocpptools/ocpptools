@@ -69,13 +69,14 @@ type ResolvedReconnect = {
  */
 export class Connection {
 	private readonly options: ConnectionOptions;
-	private readonly reconnect: ResolvedReconnect;
+	private reconnect: ResolvedReconnect;
 	private readonly connectTimeoutMs: number;
 	private current: Attempt | null = null;
 	private nextAttemptId = 1;
 	private state: ConnectionState = 'idle';
 	private attempt = 0;
 	private retryInMs: number | undefined;
+	private backoffGeneration = 0;
 	private lastClose: TransportCloseEvent | undefined;
 	private lastReason: ConnectionReason | undefined;
 	private backoffTimer: (() => void) | undefined;
@@ -110,6 +111,34 @@ export class Connection {
 
 	isDisposed(): boolean {
 		return this.disposed;
+	}
+
+	/** Merges reconnect options and reschedules an active backoff when needed. */
+	setReconnectOptions(options: ReconnectOptions): void {
+		const next = resolveReconnect({
+			enabled: options.enabled ?? this.reconnect.enabled,
+			maxAttempts: options.maxAttempts ?? this.reconnect.maxAttempts,
+			baseDelayMs: options.baseDelayMs ?? this.reconnect.baseDelayMs,
+			maxDelayMs: options.maxDelayMs ?? this.reconnect.maxDelayMs,
+			jitter: options.jitter ?? this.reconnect.jitter,
+		});
+		this.reconnect = next;
+		if (!next.enabled) {
+			this.cancelBackoff();
+			if (this.state === 'reconnecting') {
+				this.retryInMs = undefined;
+				this.transition('disconnected', 'manual');
+			}
+			return;
+		}
+		if (this.state !== 'reconnecting' || this.attempt === 0) return;
+		if (this.attempt >= next.maxAttempts) {
+			this.exhaustReconnect(this.lastReason ?? 'transport-close');
+			return;
+		}
+		const delay = this.reconnectDelay(this.attempt);
+		this.retryInMs = delay;
+		this.startBackoffTimer(delay, this.lastReason ?? 'transport-close');
 	}
 
 	connect(): void {
@@ -338,33 +367,43 @@ export class Connection {
 		}
 		this.cancelBackoff();
 		if (this.attempt >= this.reconnect.maxAttempts) {
-			this.retryInMs = undefined;
-			this.transition('disconnected', 'exhausted');
-			this.options.events.emit({
-				type: 'error',
-				at: this.options.scheduler.now(),
-				error: errorSnapshot(
-					new SimulatorError(
-						'connection-failed',
-						`Could not reconnect after ${this.reconnect.maxAttempts} attempts`,
-						{ details: { reason } },
-					),
-				),
-				fatal: true,
-			});
+			this.exhaustReconnect(reason);
 			return;
 		}
 		this.attempt += 1;
-		const delay = this.reconnectDelay(this.attempt);
-		this.retryInMs = delay;
+		this.retryInMs = this.reconnectDelay(this.attempt);
 		this.transition('reconnecting', reason);
-		if (this.current !== null || this.manual || this.disposed) {
+		if (
+			!this.reconnect.enabled ||
+			this.manual ||
+			this.disposed ||
+			this.current !== null ||
+			this.state !== 'reconnecting'
+		) {
 			return;
 		}
+		const delay = this.reconnectDelay(this.attempt);
+		this.retryInMs = delay;
+		this.startBackoffTimer(delay, reason);
+	}
+
+	private startBackoffTimer(delay: number, reason: ConnectionReason): void {
+		this.cancelBackoff();
+		if (!this.reconnect.enabled || this.manual || this.disposed || this.current !== null) {
+			return;
+		}
+		const generation = this.backoffGeneration;
 		try {
 			this.backoffTimer = this.options.scheduler.setTimeout(() => {
 				this.backoffTimer = undefined;
-				if (this.manual || this.disposed || this.current !== null) {
+				if (generation !== this.backoffGeneration) return;
+				if (
+					!this.reconnect.enabled ||
+					this.manual ||
+					this.disposed ||
+					this.current !== null ||
+					this.state !== 'reconnecting'
+				) {
 					return;
 				}
 				this.retryInMs = undefined;
@@ -376,6 +415,24 @@ export class Connection {
 			this.retryInMs = undefined;
 			this.transition('disconnected', 'exhausted');
 		}
+	}
+
+	private exhaustReconnect(reason: ConnectionReason): void {
+		this.cancelBackoff();
+		this.retryInMs = undefined;
+		this.transition('disconnected', 'exhausted');
+		this.options.events.emit({
+			type: 'error',
+			at: this.options.scheduler.now(),
+			error: errorSnapshot(
+				new SimulatorError(
+					'connection-failed',
+					`Could not reconnect after ${this.reconnect.maxAttempts} attempts`,
+					{ details: { reason } },
+				),
+			),
+			fatal: true,
+		});
 	}
 
 	private reconnectDelay(attempt: number): number {
@@ -393,6 +450,7 @@ export class Connection {
 	}
 
 	private cancelBackoff(): void {
+		this.backoffGeneration += 1;
 		this.backoffTimer?.();
 		this.backoffTimer = undefined;
 	}

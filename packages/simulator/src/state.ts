@@ -74,3 +74,14 @@ export interface CommonSimulatorOptions {
 	readonly faults?: Partial<FaultConfig>;
 	readonly inbound?: { readonly policy?: InboundResponseMode };
 }
+
+/** A stable, serializable view of the resolved simulator configuration. */
+export interface SimulatorConfig {
+	readonly version: OcppVersion;
+	readonly url: string;
+	readonly boot: Required<BootOptions>;
+	readonly queue: { readonly maxEntries: number };
+	readonly heartbeatIntervalMs: number;
+	readonly meterValueIntervalMs: number;
+	readonly ready: boolean;
+}

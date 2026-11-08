@@ -669,7 +669,7 @@ describe('Simulator201 inbound commands', () => {
 		expect((notify[0]!['reportData'] as unknown[]).length).toBeGreaterThan(0);
 		expect(
 			(notify[0]!['reportData'] as Array<Record<string, unknown>>)[0]!['variableCharacteristics'],
-		).toMatchObject({ dataType: 'string', supportsMonitoring: true });
+		).toMatchObject({ dataType: 'integer', supportsMonitoring: true });
 		expect(
 			await call(harness, 'report-2', 'GetBaseReport', {
 				requestId: 1,

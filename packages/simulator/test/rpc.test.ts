@@ -17,6 +17,7 @@ interface Harness {
 	readonly rpc: Rpc;
 	readonly sent: string[];
 	readonly history: History;
+	readonly events: EventEmitter;
 	open: boolean;
 	failSend: boolean;
 }
@@ -26,6 +27,7 @@ function createHarness(version: OcppVersion = '1.6', timeoutMs = 1000): Harness 
 	const scheduler = new Scheduler(clock);
 	const sent: string[] = [];
 	const history = new History();
+	const events = new EventEmitter(() => clock.now());
 	let sequence = 0;
 	const harness: Harness = {
 		clock,
@@ -33,10 +35,11 @@ function createHarness(version: OcppVersion = '1.6', timeoutMs = 1000): Harness 
 		failSend: false,
 		sent,
 		history,
+		events,
 		rpc: new Rpc({
 			version,
 			scheduler,
-			events: new EventEmitter(() => clock.now()),
+			events,
 			history,
 			messageIds: () => `id-${++sequence}`,
 			sendText: async (text) => {
@@ -196,6 +199,24 @@ describe('Rpc', () => {
 		await expect(call).rejects.toMatchObject({ code: 'disconnected' });
 		rpc.dispose();
 		await expect(rpc.sendCall('Heartbeat', {})).rejects.toMatchObject({ code: 'disposed' });
+	});
+
+	it('cancels with a caller code and consumes late replies', async () => {
+		const harness = createHarness();
+		const errors: string[] = [];
+		harness.events.on('error', (event) => {
+			errors.push(event.error.code);
+		});
+		const call = harness.rpc.sendCall('Heartbeat', {});
+		const second = harness.rpc.sendCall('Heartbeat', {});
+		await flushMicrotasks();
+		harness.rpc.cancelAll('cleared', 'cancelled');
+		await expect(call).rejects.toMatchObject({ code: 'cancelled' });
+		await expect(second).rejects.toMatchObject({ code: 'cancelled' });
+		harness.rpc.handleText('[3,"id-1",{}]');
+		harness.rpc.handleText('[4,"id-2","NotSupported","late",{}]');
+		await flushMicrotasks();
+		expect(errors).not.toContain('invalid-response');
 	});
 
 	it('rejects invalid error codes per version', async () => {

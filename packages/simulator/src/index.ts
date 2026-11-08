@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Rodolfo Carrillo
 
-/** The package name, used by smoke tests while the protocol is built. */
-export const SIMULATOR_NAME = '@ocpptools/simulator';
+export { SIMULATOR_NAME } from './name.js';
 
+export { createSimulator } from './factory.js';
+export type { CreateSimulatorOptions } from './factory.js';
 export { Scheduler } from './clock.js';
 export { EngineBase } from './engine.js';
 export type { BootResponse, EngineProfile, EngineState } from './engine.js';
@@ -15,6 +16,7 @@ export type {
 	BootStatus,
 	CommonSimulatorOptions,
 	FaultConfig,
+	SimulatorConfig,
 	SimulatorStateBase,
 	TimingOptions,
 } from './state.js';

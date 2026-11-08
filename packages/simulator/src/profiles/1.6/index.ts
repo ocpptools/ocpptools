@@ -69,6 +69,7 @@ export interface Simulator16State {
 	lastTransactionSeq: number;
 	chargingProfiles: JsonObject[];
 	compositeSchedules: Record<string, JsonObject>;
+	defaultIdTag: string;
 }
 
 export interface Station16Options {
@@ -83,6 +84,42 @@ export interface Station16Options {
 
 export interface Simulator16Options extends CommonSimulatorOptions {
 	readonly station: Station16Options;
+}
+
+export interface Simulator16TransactionsApi {
+	start(
+		connectorId: number,
+		idTag?: string,
+		meterStart?: number,
+	): Promise<{ ok: boolean; transactionId?: number; reason?: string }>;
+	startSession(
+		connectorId: number,
+		idTag?: string,
+	): Promise<{ ok: boolean; transactionId?: number; reason?: string }>;
+	stop(connectorId: number, reason?: string): Promise<void>;
+	meter(connectorId: number): Promise<void>;
+	status(connectorId: number, status?: ConnectorStatus16): Promise<void>;
+	get(connectorId: number): Connector16 | undefined;
+}
+
+export interface Simulator16LocalAuthApi {
+	getVersion(): number;
+	list(): LocalAuthorizationEntry[];
+	clear(): void;
+}
+
+export interface Simulator16ReservationsApi {
+	list(): Array<{ connectorId: number; reservation: Reservation16 }>;
+}
+
+export interface Simulator16ChargingProfilesApi {
+	list(): JsonObject[];
+	clear(): void;
+}
+
+export interface Simulator16AvailabilityApi {
+	setStatus(connectorId: number, status: ConnectorStatus16, errorCode?: string): Promise<void>;
+	setPower(connectorId: number, kw: number): void;
 }
 
 const meterLoops = new WeakMap<object, Map<number, () => void>>();
@@ -114,6 +151,7 @@ export function createSimulator16Profile(
 			lastTransactionSeq: 10_000,
 			chargingProfiles: [],
 			compositeSchedules: {},
+			defaultIdTag,
 		}),
 		bootPayload: () => ({
 			chargePointVendor: station.vendor,
@@ -199,7 +237,7 @@ export async function startChargingSession(
 	if (connector.status !== 'Available' && connector.status !== 'Reserved') {
 		return { ok: false, reason: 'not-available' };
 	}
-	const useIdTag = idTag ?? 'AABBCCDD';
+	const useIdTag = idTag ?? engine.state.defaultIdTag;
 	if (
 		connector.status === 'Reserved' &&
 		connector.reservation !== null &&
@@ -207,8 +245,13 @@ export async function startChargingSession(
 	) {
 		return { ok: false, reason: 'reserved' };
 	}
-	connector.reservation = null;
-	await sendStatusNotification(engine, connector, 'Preparing');
+	try {
+		await sendStatusNotification(engine, connector, 'Preparing');
+	} catch (error) {
+		await abortStart16(engine, connector);
+		reportStartError16(engine, error);
+		return { ok: false, reason: 'send-failed' };
+	}
 	try {
 		const auth = await engine.sendCall('Authorize', { idTag: useIdTag });
 		const authStatus = stringValue(
@@ -216,34 +259,98 @@ export async function startChargingSession(
 			'Invalid',
 		);
 		if (authStatus !== 'Accepted') {
-			await sendStatusNotification(engine, connector, 'Available');
+			await abortStart16(engine, connector);
 			return { ok: false, reason: 'authorize-rejected' };
 		}
-		const response = await engine.sendCall('StartTransaction', {
+		return await finalizeStartTransaction16(engine, connector, useIdTag);
+	} catch (error) {
+		reportStartError16(engine, error);
+		await abortStart16(engine, connector);
+		return { ok: false, reason: 'send-failed' };
+	}
+}
+
+/**
+ * Sends only StartTransaction, assumes the caller handled authorization and
+ * leaves the connector in Preparing first.
+ */
+export async function startTransaction(
+	engine: EngineBase<Simulator16State>,
+	connectorId: number,
+	idTag?: string,
+	meterStart?: number,
+): Promise<{ ok: boolean; transactionId?: number; reason?: string }> {
+	const connector = engine.state.connectors.find((item) => item.id === connectorId);
+	if (connector === undefined) return { ok: false, reason: 'invalid-connector' };
+	if (connector.activeTransaction !== null) return { ok: false, reason: 'occupied' };
+	if (connector.status !== 'Available' && connector.status !== 'Reserved') {
+		return { ok: false, reason: 'not-available' };
+	}
+	const useIdTag = idTag ?? engine.state.defaultIdTag;
+	if (
+		connector.status === 'Reserved' &&
+		connector.reservation !== null &&
+		connector.reservation.idTag !== useIdTag
+	) {
+		return { ok: false, reason: 'reserved' };
+	}
+	if (meterStart !== undefined && (!Number.isInteger(meterStart) || meterStart < 0)) {
+		return { ok: false, reason: 'invalid-meter-start' };
+	}
+	try {
+		await sendStatusNotification(engine, connector, 'Preparing');
+	} catch (error) {
+		await abortStart16(engine, connector);
+		reportStartError16(engine, error);
+		return { ok: false, reason: 'send-failed' };
+	}
+	return finalizeStartTransaction16(engine, connector, useIdTag, meterStart);
+}
+
+async function finalizeStartTransaction16(
+	engine: EngineBase<Simulator16State>,
+	connector: Connector16,
+	idTag: string,
+	meterStart?: number,
+): Promise<{ ok: boolean; transactionId?: number; reason?: string }> {
+	if (meterStart !== undefined && (!Number.isInteger(meterStart) || meterStart < 0)) {
+		return { ok: false, reason: 'invalid-meter-start' };
+	}
+	try {
+		const startMeter = meterStart ?? Math.round(connector.meterWh);
+		const payload: JsonObject = {
 			connectorId: connector.id,
-			idTag: useIdTag,
-			meterStart: Math.round(connector.meterWh),
+			idTag,
+			meterStart: startMeter,
 			timestamp: engine.ocppNow(),
-		});
+		};
+		if (connector.reservation !== null && connector.reservation.idTag === idTag) {
+			payload['reservationId'] = connector.reservation.id;
+		}
+		const response = await engine.sendCall('StartTransaction', payload);
 		const status = stringValue(
 			(response['idTagInfo'] as Record<string, unknown> | undefined)?.['status'],
 			'Invalid',
 		);
 		if (status !== 'Accepted') {
-			await sendStatusNotification(engine, connector, 'Available');
+			await abortStart16(engine, connector);
 			return { ok: false, reason: 'start-rejected' };
 		}
 		const transactionId =
 			typeof response['transactionId'] === 'number'
 				? response['transactionId']
 				: nextTransactionId(engine);
+		if (meterStart !== undefined) {
+			connector.meterWh = meterStart;
+		}
 		connector.activeTransaction = {
 			transactionId,
-			idTag: useIdTag,
-			meterStart: Math.round(connector.meterWh),
+			idTag,
+			meterStart: startMeter,
 			startedAt: engine.now(),
 			lastMeterWh: connector.meterWh,
 		};
+		connector.reservation = null;
 		engine.events.emit({
 			type: 'transaction',
 			at: engine.now(),
@@ -252,23 +359,77 @@ export async function startChargingSession(
 			entityId: connector.id,
 			transactionId,
 		});
-		await sendStatusNotification(engine, connector, 'Charging');
-		startMeterLoop(engine, connector.id, engine.getMeterValueIntervalMs());
+		await sendStatusNotification(engine, connector, 'Charging').catch((error: unknown) => {
+			reportStartError16(engine, error);
+		});
+		try {
+			startMeterLoop(engine, connector.id, engine.getMeterValueIntervalMs());
+		} catch (error) {
+			reportStartError16(engine, error);
+		}
 		return { ok: true, transactionId };
 	} catch (error) {
-		engine.events.emit({
-			type: 'error',
-			at: engine.now(),
-			error: {
-				name: 'SimulatorError',
-				code: error instanceof SimulatorError ? error.code : 'internal-error',
-				message: error instanceof Error ? error.message : 'Start failed',
-			},
-			fatal: false,
-		});
-		await sendStatusNotification(engine, connector, 'Available');
+		reportStartError16(engine, error);
+		await abortStart16(engine, connector);
 		return { ok: false, reason: 'send-failed' };
 	}
+}
+
+function reportStartError16(engine: EngineBase<Simulator16State>, error: unknown): void {
+	engine.events.emit({
+		type: 'error',
+		at: engine.now(),
+		error: {
+			name: 'SimulatorError',
+			code: error instanceof SimulatorError ? error.code : 'internal-error',
+			message: error instanceof Error ? error.message : 'Start failed',
+		},
+		fatal: false,
+	});
+}
+
+async function abortStart16(
+	engine: EngineBase<Simulator16State>,
+	connector: Connector16,
+): Promise<void> {
+	await sendStatusNotification(
+		engine,
+		connector,
+		connector.reservation !== null ? 'Reserved' : 'Available',
+	).catch(() => undefined);
+}
+
+export async function sendMeterValues(
+	engine: EngineBase<Simulator16State>,
+	connectorId: number,
+): Promise<void> {
+	const connector = engine.state.connectors.find((item) => item.id === connectorId);
+	if (connector === undefined) {
+		throw new SimulatorError('invalid-options', 'Unknown connector');
+	}
+	const payload: JsonObject = {
+		connectorId: connector.id,
+		meterValue: [
+			{
+				timestamp: engine.ocppNow(),
+				sampledValue: [
+					{
+						value: String(Math.round(connector.meterWh)),
+						context: 'Sample.Periodic',
+						format: 'Raw',
+						measurand: 'Energy.Active.Import.Register',
+						unit: 'Wh',
+					},
+				],
+			},
+		],
+	};
+	if (connector.activeTransaction !== null) {
+		payload['transactionId'] = connector.activeTransaction.transactionId;
+		connector.activeTransaction.lastMeterWh = connector.meterWh;
+	}
+	connector.updatedAt = engine.now();
+	await engine.sendOrQueue('MeterValues', payload);
 }
 
 export async function stopTransaction(
@@ -644,14 +805,60 @@ function clampConnectors(value: number): number {
 	return Math.max(1, Math.min(8, Math.floor(value)));
 }
 
+function clone<T>(value: T): T {
+	return JSON.parse(JSON.stringify(value)) as T;
+}
+
 export class Simulator16 extends EngineBase<Simulator16State> {
 	override readonly version = '1.6' as const;
 	readonly subprotocol = 'ocpp1.6' as const;
+	readonly transactions: Simulator16TransactionsApi;
+	readonly localAuth: Simulator16LocalAuthApi;
+	readonly reservations: Simulator16ReservationsApi;
+	readonly chargingProfiles: Simulator16ChargingProfilesApi;
+	readonly availability: Simulator16AvailabilityApi;
 	private readonly station: Station16Options;
 
 	constructor(options: Simulator16Options) {
 		super(createSimulator16Profile(options.station), options);
 		this.station = options.station;
+		this.transactions = {
+			start: (connectorId, idTag, meterStart) =>
+				startTransaction(this, connectorId, idTag ?? this.station.defaultIdTag, meterStart),
+			startSession: (connectorId, idTag) =>
+				startChargingSession(this, connectorId, idTag ?? this.station.defaultIdTag),
+			stop: (connectorId, reason) => stopTransaction(this, connectorId, reason),
+			meter: (connectorId) => sendMeterValues(this, connectorId),
+			status: (connectorId, status) => this.sendStatusNotification(connectorId, status),
+			get: (connectorId) => this.getConnector(connectorId),
+		};
+		this.localAuth = {
+			getVersion: () => this.state.localListVersion,
+			list: () => this.state.localAuthorizationList.map((entry) => clone(entry)),
+			clear: () => {
+				this.state.localAuthorizationList = [];
+			},
+		};
+		this.reservations = {
+			list: () =>
+				this.state.connectors
+					.filter((connector) => connector.reservation !== null)
+					.map((connector) => ({
+						connectorId: connector.id,
+						reservation: clone(connector.reservation as Reservation16),
+					})),
+		};
+		this.chargingProfiles = {
+			list: () => this.state.chargingProfiles.map((profile) => clone(profile)),
+			clear: () => {
+				this.state.chargingProfiles = [];
+			},
+		};
+		this.availability = {
+			setStatus: (connectorId, status, errorCode) =>
+				this.sendStatusNotification(connectorId, status, errorCode),
+			setPower: (connectorId, kw) => this.setChargingPowerKw(connectorId, kw),
+		};
 	}
 
 	sendHeartbeat(): Promise<JsonObject> {
@@ -683,6 +890,18 @@ export class Simulator16 extends EngineBase<Simulator16State> {
 		idTag?: string,
 	): Promise<{ ok: boolean; transactionId?: number; reason?: string }> {
 		return startChargingSession(this, connectorId, idTag ?? this.station.defaultIdTag);
+	}
+
+	startTransaction(
+		connectorId: number,
+		idTag?: string,
+		meterStart?: number,
+	): Promise<{ ok: boolean; transactionId?: number; reason?: string }> {
+		return startTransaction(this, connectorId, idTag ?? this.station.defaultIdTag, meterStart);
+	}
+
+	sendMeterValues(connectorId: number): Promise<void> {
+		return sendMeterValues(this, connectorId);
 	}
 
 	stopTransaction(connectorId: number, reason = 'Local'): Promise<void> {
