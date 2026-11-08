@@ -6,7 +6,8 @@
     "packages/validator/src/index.ts",
     "packages/simulator/src/index.ts",
     "packages/simulator/src/1.6.ts",
-    "packages/simulator/src/2.0.1.ts"
+    "packages/simulator/src/2.0.1.ts",
+    "packages/simulator/src/browser/index.ts"
   ],
   "tsconfig": "tsconfig.typedoc.json",
   "out": "docs/api",
