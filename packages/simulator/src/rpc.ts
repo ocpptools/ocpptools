@@ -92,6 +92,7 @@ export class Rpc {
 	private readonly pending = new Map<MessageId, PendingEntry>();
 	private readonly inboundCalls = new Map<MessageId, InboundEntry>();
 	private readonly recentlyReplied = new Set<MessageId>();
+	private readonly trackedResults = new Set<MessageId>();
 	private readonly handlers = new Map<string, CallHandler>();
 	private readonly timeoutMs: number;
 	private epoch = 0;
@@ -111,6 +112,20 @@ export class Rpc {
 
 	get currentEpoch(): number {
 		return this.epoch;
+	}
+
+	/**
+	 * Marks a message ID that was sent without a caller promise, such as queue
+	 * replay. A later CALLRESULT or CALLERROR for it is consumed silently.
+	 */
+	trackResult(messageId: MessageId): void {
+		this.trackedResults.add(messageId);
+		if (this.trackedResults.size > 1000) {
+			const oldest = this.trackedResults.values().next().value;
+			if (oldest !== undefined) {
+				this.trackedResults.delete(oldest);
+			}
+		}
 	}
 
 	onCall(action: string, handler: CallHandler): () => void {
@@ -308,6 +323,7 @@ export class Rpc {
 				this.inboundCalls.delete(entry.messageId);
 			}
 		}
+		this.trackedResults.clear();
 	}
 
 	dispose(): void {
@@ -565,6 +581,9 @@ export class Rpc {
 		}
 		const entry = this.pending.get(frame[1]);
 		if (entry === undefined || entry.epoch !== epoch) {
+			if (this.trackedResults.delete(frame[1])) {
+				return;
+			}
 			this.report(new SimulatorError('invalid-response', `Unknown CALLRESULT ${frame[1]}`));
 			return;
 		}
@@ -580,6 +599,9 @@ export class Rpc {
 			this.system('warning', `Unknown OCPP ${this.version} CALLERROR code ${frame[2]}`);
 		}
 		if (entry === undefined || entry.epoch !== epoch) {
+			if (this.trackedResults.delete(frame[1])) {
+				return;
+			}
 			this.report(new SimulatorError('invalid-response', `Unknown CALLERROR ${frame[1]}`));
 			return;
 		}
@@ -650,7 +672,7 @@ export class Rpc {
 			if (id.length > 36) {
 				throw new SimulatorError('invalid-options', 'The message ID is longer than 36 characters');
 			}
-			if (!this.pending.has(id)) {
+			if (!this.pending.has(id) && !this.trackedResults.has(id)) {
 				return id;
 			}
 		}

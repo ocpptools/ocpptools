@@ -325,8 +325,10 @@ assert.equal(typeof schemaUtils.normalizeSchema, 'function');
 		workspaceDependencies: ['core'],
 		exports: [
 			'Connection',
+			'EngineBase',
 			'EventEmitter',
 			'History',
+			'Metrics',
 			'OfflineQueue',
 			'Rpc',
 			'SIMULATOR_NAME',
