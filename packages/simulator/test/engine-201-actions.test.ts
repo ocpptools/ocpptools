@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createHarness201, type Harness201 } from './helpers/simulator-201.js';
+import { expectSchemaValid } from './helpers/schema-validator.js';
 
 const INBOUND: Array<[string, Record<string, unknown>]> = [
 	['CancelReservation', { reservationId: 1 }],
@@ -198,6 +199,7 @@ describe('Simulator201 action matrix', () => {
 			const reply = harness.reply(`matrix-${action}`);
 			expect(reply, `${action} did not reply`).toBeDefined();
 			expect(reply?.[2], `${action} is not implemented`).not.toBe('NotImplemented');
+			if (reply !== undefined) await expectSchemaValid('2.0.1', reply, action);
 			harness.simulator.dispose();
 		}
 	});
@@ -222,7 +224,9 @@ describe('Simulator201 action matrix', () => {
 		await harness.simulator.sendMeterValues(1);
 		await harness.simulator.sendNotifyChargingLimit('EMS', 1);
 		await harness.simulator.sendNotifyCustomerInformation(1, 'data');
-		await harness.simulator.sendNotifyDisplayMessages(1, []);
+		await harness.simulator.sendNotifyDisplayMessages(1, [
+			{ id: 1, priority: 'NormalCycle', message: { format: 'UTF8', content: 'x' } },
+		]);
 		await harness.simulator.sendNotifyEVChargingNeeds(1);
 		await harness.simulator.sendNotifyEVChargingSchedule(1, {
 			id: 1,
@@ -250,6 +254,7 @@ describe('Simulator201 action matrix', () => {
 		});
 		harness.incoming('matrix-monitor-report', 'GetMonitoringReport', { requestId: 1 });
 		harness.incoming('matrix-report', 'GetReport', { requestId: 1 });
+		for (const call of harness.calls()) await expectSchemaValid('2.0.1', call);
 		harness.incoming('matrix-profile', 'SetChargingProfile', {
 			evseId: 1,
 			chargingProfile: {
