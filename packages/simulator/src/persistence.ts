@@ -150,7 +150,7 @@ export function validateConfig(config: Record<string, unknown>): void {
 	if (!isFiniteNumber(config['heartbeatIntervalMs']) || config['heartbeatIntervalMs'] <= 0) {
 		throw new Error('config.heartbeatIntervalMs is invalid');
 	}
-	if (!isFiniteNumber(config['meterValueIntervalMs']) || config['meterValueIntervalMs'] <= 0) {
+	if (!isFiniteNumber(config['meterValueIntervalMs']) || config['meterValueIntervalMs'] < 0) {
 		throw new Error('config.meterValueIntervalMs is invalid');
 	}
 }

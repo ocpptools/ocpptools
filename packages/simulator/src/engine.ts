@@ -110,6 +110,7 @@ export class EngineBase<S extends object> {
 	private clockOffsetMs = 0;
 	private ready = false;
 	private disposed = false;
+	private rebootBoot = false;
 	private session = 0;
 	private heartbeatCancel: (() => void) | undefined;
 	private bootRetryCancel: (() => void) | undefined;
@@ -249,6 +250,18 @@ export class EngineBase<S extends object> {
 		this.connection.disconnect();
 	}
 
+	/** Drops the current transport and starts a fresh boot cycle. */
+	reboot(): void {
+		this.assertActive();
+		this.ready = false;
+		this.boot = { status: 'not-booted' };
+		this.clockOffsetMs = 0;
+		this.rpc.reset('disconnected');
+		this.connection.disconnect();
+		this.rebootBoot = true;
+		this.connection.connect();
+	}
+
 	setReconnectOptions(options: ReconnectOptions): void {
 		this.assertActive();
 		this.connection.setReconnectOptions(options);
@@ -343,6 +356,28 @@ export class EngineBase<S extends object> {
 				this.emitQueue('overflow', this.queue.size, dropped);
 			}
 			return 'queued';
+		} catch (error) {
+			this.rpc.releaseMessageId(messageId);
+			throw error;
+		}
+	}
+
+	async queueCall(action: string, payload: JsonObject): Promise<void> {
+		this.assertActive();
+		const messageId = this.rpc.reserveMessageId();
+		try {
+			const frame: CallFrame = [2, messageId, action, payload];
+			if (this.needsValidation()) {
+				await this.validateFrame(frame);
+				this.assertActive();
+			}
+			this.rpc.trackResult(messageId);
+			this.rpc.releaseMessageId(messageId);
+			const dropped = this.queue.enqueue(action, payload, messageId);
+			this.emitQueue('enqueued', this.queue.size);
+			if (dropped !== undefined) {
+				this.emitQueue('overflow', this.queue.size, dropped);
+			}
 		} catch (error) {
 			this.rpc.releaseMessageId(messageId);
 			throw error;
@@ -581,8 +616,8 @@ export class EngineBase<S extends object> {
 	}
 
 	setMeterValueIntervalMs(value: number): void {
-		if (!Number.isFinite(value) || value <= 0) {
-			throw new SimulatorError('invalid-options', 'Meter interval must be positive');
+		if (!Number.isFinite(value) || value < 0) {
+			throw new SimulatorError('invalid-options', 'Meter interval must not be negative');
 		}
 		this.meterIntervalMs = value;
 	}
@@ -860,7 +895,8 @@ export class EngineBase<S extends object> {
 		if (!this.bootOptions.required) {
 			void this.becomeReady('open');
 		}
-		if (this.bootOptions.auto) {
+		if (this.bootOptions.auto || this.rebootBoot) {
+			this.rebootBoot = false;
 			void this.bootNotification().catch((error: unknown) => this.reportBackgroundError(error));
 		}
 	}

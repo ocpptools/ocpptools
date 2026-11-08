@@ -172,7 +172,14 @@ await simulator16.stopTransaction(1, 'Local');
 ```
 
 The profile keeps the full 1.6 action surface: 9 charge-point actions and 19
-CSMS commands.
+CSMS commands. Charging profiles support replacement by id or by purpose and
+stack, filtered clearing, and composite schedules that merge the station
+maximum with the active transaction or default profile. `Hard` and `Soft`
+reset follow the 1.6 behavior, `TriggerMessage` handles every 1.6 message, and
+`GetConfiguration`/`ChangeConfiguration` model the writable catalog. Diagnostics
+and firmware emit timed status sequences, reservations expire with the OCPP
+clock, and availability changes apply immediately to idle connectors and after
+the active transaction to the rest.
 
 ## OCPP 2.0.1
 
