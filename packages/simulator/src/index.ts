@@ -28,10 +28,18 @@ export type {
 	BootStatus,
 	CommonSimulatorOptions,
 	FaultConfig,
+	PersistenceOptions,
 	SimulatorConfig,
 	SimulatorStateBase,
 	TimingOptions,
 } from './state.js';
+export type {
+	LoadResult,
+	RestoreResult,
+	SaveResult,
+	SimulatorPersistedConfig,
+	SimulatorSnapshot,
+} from './persistence.js';
 export { Connection } from './connection.js';
 export type { ConnectionOptions, ConnectionSnapshot, ReconnectOptions } from './connection.js';
 export { OfflineQueue } from './queue.js';

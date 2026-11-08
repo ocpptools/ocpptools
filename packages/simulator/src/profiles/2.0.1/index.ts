@@ -5,6 +5,7 @@ import type { JsonObject } from '@ocpptools/core';
 
 import { EngineBase, type EngineProfile } from '../../engine.js';
 import { SimulatorError, isAlreadyCountedError } from '../../errors.js';
+import { isFiniteNumber, isInteger, isRecord } from '../../persistence.js';
 import type { CallContext } from '../../rpc.js';
 import {
 	runScenario,
@@ -319,6 +320,17 @@ export function createSimulator201Profile(
 		register: (engine) => {
 			registerInbound(engine);
 		},
+		restoreState: (value) => restoreSimulator201State(value),
+		onRestored: (engine) => {
+			rearmReservations201(engine);
+			if (engine.isReady) {
+				for (const evse of engine.state.evses) {
+					if (evse.transaction !== null) {
+						startMeterLoop(engine, evse.id, engine.getMeterValueIntervalMs());
+					}
+				}
+			}
+		},
 		onReady: async (engine) => {
 			await sendAllStatusNotifications(engine);
 			rearmReservations201(engine);
@@ -335,6 +347,463 @@ export function createSimulator201Profile(
 				loops.clear();
 			}
 		},
+	};
+}
+
+const EVSE_STATUSES201 = ['Available', 'Occupied', 'Reserved', 'Unavailable', 'Faulted'] as const;
+const CHARGING_STATES201 = [
+	'EVConnected',
+	'Charging',
+	'SuspendedEV',
+	'SuspendedEVSE',
+	'Idle',
+] as const;
+const ID_TOKEN_KINDS201 = [
+	'Central',
+	'eMAID',
+	'ISO14443',
+	'ISO15693',
+	'KeyCode',
+	'Local',
+	'MacAddress',
+	'NoAuthorization',
+] as const;
+const MONITOR_TYPES201 = [
+	'UpperThreshold',
+	'LowerThreshold',
+	'Delta',
+	'Periodic',
+	'PeriodicClockAligned',
+] as const;
+
+function invalid201(message: string): never {
+	throw new SimulatorError('invalid-snapshot', message);
+}
+
+function restoreSimulator201State(value: unknown): Simulator201State {
+	if (!isRecord(value)) {
+		invalid201('The 2.0.1 state must be an object');
+	}
+	return {
+		evses: restoreEvses201(value['evses']),
+		variables: restoreVariables201(value['variables']),
+		completedTransactions: restoreCompleted201(value['completedTransactions']),
+		txSeq: restoreInteger201(value['txSeq'], 'txSeq', 0),
+		pendingResets: restorePendingResets201(value['pendingResets']),
+		monitoring: restoreMonitoring201(value['monitoring']),
+		networkProfiles: restoreNetworkProfiles201(value['networkProfiles']),
+		localAuthorization: restoreLocalAuth201(value['localAuthorization']),
+		reservations: restoreReservations201(value['reservations']),
+		charging: restoreCharging201(value['charging']),
+		services: restoreServices201(value['services']),
+		security: restoreSecurity201(value['security']),
+	};
+}
+
+function restoreInteger201(value: unknown, name: string, min = 0): number {
+	if (!isInteger(value) || value < min) invalid201(`${name} is invalid`);
+	return value;
+}
+
+function restoreEvses201(value: unknown): Simulator201State['evses'] {
+	if (!Array.isArray(value) || value.length === 0) invalid201('evses must be a non-empty array');
+	return value.map((entry, index) => {
+		if (!isRecord(entry)) invalid201(`evses[${index}] is invalid`);
+		const id = restoreInteger201(entry['id'], `evses[${index}].id`, 1);
+		const connectorId = restoreInteger201(entry['connectorId'], `evses[${index}].connectorId`);
+		const status = entry['status'];
+		const operational = entry['operational'];
+		const statusBeforeInoperative = entry['statusBeforeInoperative'];
+		if (typeof status !== 'string' || !EVSE_STATUSES201.includes(status as never)) {
+			invalid201(`evses[${index}].status is invalid`);
+		}
+		if (operational !== 'Operative' && operational !== 'Inoperative') {
+			invalid201(`evses[${index}].operational is invalid`);
+		}
+		if (
+			statusBeforeInoperative !== null &&
+			(typeof statusBeforeInoperative !== 'string' ||
+				!EVSE_STATUSES201.includes(statusBeforeInoperative as never))
+		) {
+			invalid201(`evses[${index}].statusBeforeInoperative is invalid`);
+		}
+		const pendingOperational = entry['pendingOperational'];
+		if (
+			pendingOperational !== null &&
+			pendingOperational !== 'Operative' &&
+			pendingOperational !== 'Inoperative'
+		) {
+			invalid201(`evses[${index}].pendingOperational is invalid`);
+		}
+		if (typeof entry['starting'] !== 'boolean') {
+			invalid201(`evses[${index}].starting is invalid`);
+		}
+		const meterWh = entry['meterWh'];
+		const chargingPowerKw = entry['chargingPowerKw'];
+		const defaultChargingPowerKw = entry['defaultChargingPowerKw'];
+		if (!isFiniteNumber(meterWh) || meterWh < 0) invalid201(`evses[${index}].meterWh is invalid`);
+		if (!isFiniteNumber(chargingPowerKw) || chargingPowerKw < 0) {
+			invalid201(`evses[${index}].chargingPowerKw is invalid`);
+		}
+		if (!isFiniteNumber(defaultChargingPowerKw) || defaultChargingPowerKw < 0) {
+			invalid201(`evses[${index}].defaultChargingPowerKw is invalid`);
+		}
+		if (!isFiniteNumber(entry['updatedAt'])) {
+			invalid201(`evses[${index}].updatedAt is invalid`);
+		}
+		return {
+			id,
+			connectorId,
+			status: status as Simulator201State['evses'][number]['status'],
+			operational: operational,
+			statusBeforeInoperative:
+				statusBeforeInoperative as Simulator201State['evses'][number]['statusBeforeInoperative'],
+			meterWh,
+			chargingPowerKw,
+			defaultChargingPowerKw,
+			transaction: restoreTransaction201(entry['transaction'], index),
+			pendingOperational: pendingOperational,
+			starting: false,
+			updatedAt: entry['updatedAt'],
+		};
+	});
+}
+
+function restoreTransaction201(
+	value: unknown,
+	index: number,
+): Simulator201State['evses'][number]['transaction'] {
+	if (value === null) return null;
+	if (!isRecord(value)) invalid201(`evses[${index}].transaction is invalid`);
+	const transactionId = value['transactionId'];
+	const idToken = value['idToken'];
+	const idTokenType = value['idTokenType'];
+	const chargingState = value['chargingState'];
+	if (typeof transactionId !== 'string' || transactionId === '') {
+		invalid201(`evses[${index}].transaction.transactionId is invalid`);
+	}
+	if (typeof idToken !== 'string' || idToken === '') {
+		invalid201(`evses[${index}].transaction.idToken is invalid`);
+	}
+	if (typeof idTokenType !== 'string' || !ID_TOKEN_KINDS201.includes(idTokenType as never)) {
+		invalid201(`evses[${index}].transaction.idTokenType is invalid`);
+	}
+	if (typeof chargingState !== 'string' || !CHARGING_STATES201.includes(chargingState as never)) {
+		invalid201(`evses[${index}].transaction.chargingState is invalid`);
+	}
+	if (
+		!isFiniteNumber(value['startedAt']) ||
+		!isInteger(value['seqNo']) ||
+		!isFiniteNumber(value['meterStartWh']) ||
+		typeof value['stopping'] !== 'boolean'
+	) {
+		invalid201(`evses[${index}].transaction is invalid`);
+	}
+	const remoteStartId = value['remoteStartId'];
+	const reservationId = value['reservationId'];
+	if (remoteStartId !== undefined && !isInteger(remoteStartId)) {
+		invalid201(`evses[${index}].transaction.remoteStartId is invalid`);
+	}
+	if (reservationId !== undefined && !isInteger(reservationId)) {
+		invalid201(`evses[${index}].transaction.reservationId is invalid`);
+	}
+	return {
+		transactionId,
+		idToken,
+		idTokenType: idTokenType as IdTokenKind201,
+		startedAt: value['startedAt'],
+		chargingState: chargingState as ChargingState201,
+		seqNo: value['seqNo'],
+		meterStartWh: value['meterStartWh'],
+		...(remoteStartId === undefined ? {} : { remoteStartId }),
+		...(reservationId === undefined ? {} : { reservationId }),
+		stopping: false,
+	};
+}
+
+function restoreVariables201(value: unknown): Simulator201State['variables'] {
+	if (!isRecord(value)) invalid201('variables must be an object');
+	const variables: Record<string, string> = {};
+	for (const [key, entry] of Object.entries(value)) {
+		if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+			invalid201('variables contains a reserved key');
+		}
+		if (typeof entry !== 'string') invalid201(`variables.${key} is invalid`);
+		variables[key] = entry;
+	}
+	return variables;
+}
+
+function restoreCompleted201(value: unknown): Simulator201State['completedTransactions'] {
+	if (!Array.isArray(value)) invalid201('completedTransactions must be an array');
+	return value.map((entry, index) => {
+		if (!isRecord(entry)) invalid201(`completedTransactions[${index}] is invalid`);
+		const { evseId, transactionId, idToken, energyWh, startedAt, stoppedAt, reason } = entry;
+		if (
+			!isInteger(evseId) ||
+			typeof transactionId !== 'string' ||
+			typeof idToken !== 'string' ||
+			!isFiniteNumber(energyWh) ||
+			!isFiniteNumber(startedAt) ||
+			!isFiniteNumber(stoppedAt) ||
+			typeof reason !== 'string'
+		) {
+			invalid201(`completedTransactions[${index}] is invalid`);
+		}
+		return { evseId, transactionId, idToken, energyWh, startedAt, stoppedAt, reason };
+	});
+}
+
+function restorePendingResets201(value: unknown): Simulator201State['pendingResets'] {
+	if (
+		!isRecord(value) ||
+		typeof value['station'] !== 'boolean' ||
+		!Array.isArray(value['evseIds'])
+	) {
+		invalid201('pendingResets is invalid');
+	}
+	if (!value['evseIds'].every((id) => isInteger(id)))
+		invalid201('pendingResets.evseIds is invalid');
+	return { station: value['station'], evseIds: [...value['evseIds']] };
+}
+
+function restoreMonitoring201(value: unknown): Simulator201State['monitoring'] {
+	if (!isRecord(value)) invalid201('monitoring is invalid');
+	const base = value['base'];
+	if (base !== 'All' && base !== 'FactoryDefault' && base !== 'HardWiredOnly') {
+		invalid201('monitoring.base is invalid');
+	}
+	const level = restoreInteger201(value['level'], 'monitoring.level');
+	if (level > 9) invalid201('monitoring.level is invalid');
+	const monitors = value['monitors'];
+	if (!Array.isArray(monitors)) invalid201('monitoring.monitors is invalid');
+	const restoredMonitors = monitors.map((entry, index) => {
+		if (!isRecord(entry)) invalid201(`monitoring.monitors[${index}] is invalid`);
+		const type = entry['type'];
+		if (typeof type !== 'string' || !MONITOR_TYPES201.includes(type as never)) {
+			invalid201(`monitoring.monitors[${index}].type is invalid`);
+		}
+		if (
+			!isInteger(entry['id']) ||
+			!isRecord(entry['component']) ||
+			!isRecord(entry['variable']) ||
+			!isFiniteNumber(entry['value']) ||
+			!isInteger(entry['severity']) ||
+			typeof entry['transaction'] !== 'boolean' ||
+			typeof entry['triggered'] !== 'boolean' ||
+			(entry['lastReportedValue'] !== null && !isFiniteNumber(entry['lastReportedValue']))
+		) {
+			invalid201(`monitoring.monitors[${index}] is invalid`);
+		}
+		return {
+			id: entry['id'],
+			component: { ...entry['component'] } as JsonObject,
+			variable: { ...entry['variable'] } as JsonObject,
+			value: entry['value'],
+			type: type as Simulator201State['monitoring']['monitors'][number]['type'],
+			severity: entry['severity'],
+			transaction: entry['transaction'],
+			triggered: entry['triggered'],
+			lastReportedValue: entry['lastReportedValue'],
+		};
+	});
+	return {
+		base,
+		level,
+		monitors: restoredMonitors,
+		nextId: restoreInteger201(value['nextId'], 'monitoring.nextId', 1),
+		eventIdSeq: restoreInteger201(value['eventIdSeq'], 'monitoring.eventIdSeq'),
+	};
+}
+
+function restoreNetworkProfiles201(value: unknown): Simulator201State['networkProfiles'] {
+	if (!Array.isArray(value)) invalid201('networkProfiles must be an array');
+	return value.map((entry, index) => {
+		if (
+			!isRecord(entry) ||
+			!isInteger(entry['configurationSlot']) ||
+			!isRecord(entry['connectionData']) ||
+			!isFiniteNumber(entry['updatedAt'])
+		) {
+			invalid201(`networkProfiles[${index}] is invalid`);
+		}
+		return {
+			configurationSlot: entry['configurationSlot'],
+			connectionData: { ...entry['connectionData'] } as JsonObject,
+			updatedAt: entry['updatedAt'],
+		};
+	});
+}
+
+function restoreLocalAuth201(value: unknown): Simulator201State['localAuthorization'] {
+	if (!isRecord(value)) invalid201('localAuthorization is invalid');
+	const entries = value['entries'];
+	if (!Array.isArray(entries)) invalid201('localAuthorization.entries is invalid');
+	return {
+		versionNumber: restoreInteger201(value['versionNumber'], 'localAuthorization.versionNumber'),
+		entries: entries.map((entry, index) => {
+			if (!isRecord(entry) || !isRecord(entry['idToken'])) {
+				invalid201(`localAuthorization.entries[${index}] is invalid`);
+			}
+			const token = entry['idToken'];
+			if (typeof token['idToken'] !== 'string' || typeof token['type'] !== 'string') {
+				invalid201(`localAuthorization.entries[${index}].idToken is invalid`);
+			}
+			if (entry['idTokenInfo'] !== undefined && !isRecord(entry['idTokenInfo'])) {
+				invalid201(`localAuthorization.entries[${index}].idTokenInfo is invalid`);
+			}
+			return {
+				idToken: { idToken: token['idToken'], type: token['type'] },
+				...(entry['idTokenInfo'] === undefined
+					? {}
+					: { idTokenInfo: { ...entry['idTokenInfo'] } as JsonObject }),
+			};
+		}),
+	};
+}
+
+function restoreReservations201(value: unknown): Simulator201State['reservations'] {
+	if (!Array.isArray(value)) invalid201('reservations must be an array');
+	return value.map((entry, index) => {
+		if (!isRecord(entry) || !isRecord(entry['idToken'])) {
+			invalid201(`reservations[${index}] is invalid`);
+		}
+		const token = entry['idToken'];
+		if (
+			!isInteger(entry['id']) ||
+			!isInteger(entry['evseId']) ||
+			typeof entry['expiryDateTime'] !== 'string' ||
+			typeof token['idToken'] !== 'string' ||
+			typeof token['type'] !== 'string'
+		) {
+			invalid201(`reservations[${index}] is invalid`);
+		}
+		const group = entry['groupIdToken'];
+		if (group !== undefined) {
+			if (
+				!isRecord(group) ||
+				typeof group['idToken'] !== 'string' ||
+				typeof group['type'] !== 'string'
+			) {
+				invalid201(`reservations[${index}].groupIdToken is invalid`);
+			}
+		}
+		return {
+			id: entry['id'],
+			evseId: entry['evseId'],
+			expiryDateTime: entry['expiryDateTime'],
+			idToken: { idToken: token['idToken'], type: token['type'] },
+			...(group === undefined
+				? {}
+				: {
+						groupIdToken: {
+							idToken: group['idToken'] as string,
+							type: group['type'] as string,
+						},
+					}),
+		};
+	});
+}
+
+function restoreCharging201(value: unknown): Simulator201State['charging'] {
+	if (!isRecord(value) || !Array.isArray(value['profiles'])) {
+		invalid201('charging is invalid');
+	}
+	return {
+		profiles: value['profiles'].map((entry, index) => {
+			if (
+				!isRecord(entry) ||
+				!isInteger(entry['evseId']) ||
+				!isRecord(entry['profile']) ||
+				!isFiniteNumber(entry['receivedAt'])
+			) {
+				invalid201(`charging.profiles[${index}] is invalid`);
+			}
+			return {
+				evseId: entry['evseId'],
+				profile: { ...entry['profile'] } as JsonObject,
+				receivedAt: entry['receivedAt'],
+			};
+		}),
+	};
+}
+
+function restoreServices201(value: unknown): Simulator201State['services'] {
+	if (!isRecord(value)) invalid201('services is invalid');
+	const displays = value['displays'];
+	if (!Array.isArray(displays)) invalid201('services.displays is invalid');
+	for (const [index, entry] of displays.entries()) {
+		if (!isRecord(entry) || !isRecord(entry['message'])) {
+			invalid201(`services.displays[${index}] is invalid`);
+		}
+	}
+	if (
+		!isRecord(value['cost']) ||
+		!isRecord(value['customer']) ||
+		!isRecord(value['firmware']) ||
+		!isRecord(value['log'])
+	) {
+		invalid201('services is invalid');
+	}
+	return {
+		displays: displays.map((entry) => ({
+			message: { ...((entry as Record<string, unknown>)['message'] as JsonObject) },
+		})),
+		cost: { ...value['cost'] },
+		customer: { ...value['customer'] },
+		firmware: { ...value['firmware'] },
+		log: { ...value['log'] },
+	};
+}
+
+function restoreSecurity201(value: unknown): Simulator201State['security'] {
+	if (!isRecord(value)) invalid201('security is invalid');
+	const certificates = value['certificates'];
+	if (!Array.isArray(certificates)) invalid201('security.certificates is invalid');
+	const restoredCertificates = certificates.map((entry, index) => {
+		if (
+			!isRecord(entry) ||
+			typeof entry['certificateType'] !== 'string' ||
+			!isRecord(entry['hash']) ||
+			typeof entry['certificate'] !== 'string' ||
+			!isFiniteNumber(entry['installedAt'])
+		) {
+			invalid201(`security.certificates[${index}] is invalid`);
+		}
+		return {
+			certificateType: entry['certificateType'],
+			hash: { ...entry['hash'] } as JsonObject,
+			certificate: entry['certificate'],
+			installedAt: entry['installedAt'],
+		};
+	});
+	if (!isRecord(value['signedChains'])) invalid201('security.signedChains is invalid');
+	const signedChains: Record<string, string> = {};
+	for (const [key, entry] of Object.entries(value['signedChains'])) {
+		if (typeof entry !== 'string') invalid201('security.signedChains is invalid');
+		signedChains[key] = entry;
+	}
+	const events = value['events'];
+	if (!Array.isArray(events)) invalid201('security.events is invalid');
+	const restoredEvents = events.map((entry, index) => {
+		if (
+			!isRecord(entry) ||
+			typeof entry['type'] !== 'string' ||
+			typeof entry['timestamp'] !== 'string'
+		) {
+			invalid201(`security.events[${index}] is invalid`);
+		}
+		return {
+			type: entry['type'],
+			timestamp: entry['timestamp'],
+			...(typeof entry['techInfo'] === 'string' ? { techInfo: entry['techInfo'] } : {}),
+		};
+	});
+	return {
+		certificates: restoredCertificates,
+		signedChains,
+		events: restoredEvents,
+		nextSerial: restoreInteger201(value['nextSerial'], 'security.nextSerial', 1),
 	};
 }
 
@@ -660,7 +1129,7 @@ export async function sendTransactionEvent(
 	// retried with the same sequence number.
 	transaction.seqNo += 1;
 	if (eventType === 'Started') {
-		transaction.reservationId = undefined;
+		delete transaction.reservationId;
 	}
 }
 

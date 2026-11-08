@@ -45,6 +45,11 @@ export class History {
 		this.entries = [];
 	}
 
+	/** Replaces the history with entries that were already validated. */
+	restore(entries: readonly SimulatorLogEntry[]): void {
+		this.entries = entries.slice(0, this.maxEntries);
+	}
+
 	setMaxEntries(maxEntries: number): void {
 		this.maxEntries = normalizeBound(maxEntries);
 		if (this.entries.length > this.maxEntries) {
