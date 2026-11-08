@@ -126,11 +126,12 @@ describe('Simulator16 engine', () => {
 	it('becomes ready on open when boot is not required', async () => {
 		const clock = new FakeClock();
 		const factory = new FakeTransportFactory();
+		let sequence = 0;
 		const simulator = new Simulator16({
 			url: 'ws://localhost/CP001',
 			transport: factory.factory,
 			clock,
-			messageIds: () => 'id-1',
+			messageIds: () => `id-${++sequence}`,
 			station: {
 				id: 'CP001',
 				vendor: 'Acme',

@@ -162,6 +162,8 @@ export interface ErrorEvent {
 	readonly at: number;
 	readonly error: SimulatorErrorSnapshot;
 	readonly fatal: boolean;
+	/** False when the error only adds context to an already-counted failure. */
+	readonly countsAsError?: boolean;
 }
 
 export type SimulatorEvent =

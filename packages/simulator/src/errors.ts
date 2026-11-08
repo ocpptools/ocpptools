@@ -95,6 +95,20 @@ export class SimulatorValidationError extends SimulatorError {
 	}
 }
 
+/** True when a pending CALL already counted this failure. */
+export function isAlreadyCountedError(error: unknown): boolean {
+	return (
+		error instanceof SimulatorError &&
+		(error.code === 'call-error' ||
+			error.code === 'timeout' ||
+			error.code === 'send-failed' ||
+			error.code === 'invalid-response' ||
+			error.code === 'validation-blocked' ||
+			error.code === 'disconnected' ||
+			error.code === 'cancelled')
+	);
+}
+
 /** Converts an unknown thrown value into a stable event/log snapshot. */
 export function errorSnapshot(error: unknown): SimulatorErrorSnapshot {
 	if (error instanceof SimulatorValidationError) {
