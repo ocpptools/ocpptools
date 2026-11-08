@@ -1,6 +1,6 @@
 {
   "name": "@ocpptools/simulator",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Headless OCPP 1.6J and 2.0.1 charge point simulator with injectable transports, clock, and storage.",
   "license": "Apache-2.0",
