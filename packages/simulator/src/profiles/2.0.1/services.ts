@@ -19,6 +19,7 @@ export interface ServicesState201 {
 	firmware: {
 		status?: string;
 		requestId?: number;
+		publishStatus?: string;
 		publish?: { location: string; checksum: string; requestId: number };
 	};
 	log: { requestId?: number; status?: string };
@@ -100,6 +101,7 @@ export function createServicesHandlers(
 				.map((item) => item.message)
 				.filter(
 					(message) =>
+						displayActive201(engine, message) &&
 						(ids === undefined || ids.includes(integerValue(message['id']) ?? -1)) &&
 						(priority === undefined || message['priority'] === priority) &&
 						(state === undefined || message['state'] === state),
@@ -293,6 +295,7 @@ export async function sendPublishFirmwareStatus201(
 	location?: string[],
 	requestId?: number,
 ): Promise<void> {
+	engine.state.services.firmware.publishStatus = status;
 	await engine.sendOrQueue('PublishFirmwareStatusNotification', {
 		status,
 		...(location === undefined ? {} : { location }),
@@ -338,6 +341,19 @@ export async function sendNotifyCustomerInformation201(
 		generatedAt: engine.ocppNow(),
 		tbc,
 	});
+}
+
+function displayActive201(engine: EngineBase<Simulator201State>, message: JsonObject): boolean {
+	const now = Date.parse(engine.ocppNow());
+	const start =
+		typeof message['startDateTime'] === 'string'
+			? Date.parse(message['startDateTime'])
+			: Number.NaN;
+	const end =
+		typeof message['endDateTime'] === 'string' ? Date.parse(message['endDateTime']) : Number.NaN;
+	if (Number.isFinite(start) && start > now) return false;
+	if (Number.isFinite(end) && end <= now) return false;
+	return true;
 }
 
 export function removeTransactionDisplays201(

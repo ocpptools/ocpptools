@@ -39,6 +39,46 @@ function monitorData(overrides: Record<string, unknown> = {}): Record<string, un
 }
 
 describe('Simulator201 device model', () => {
+	it('runs periodic monitors and cancels them on clear', async () => {
+		const harness = createHarness201();
+		await harness.ready();
+		await call(harness, 'mon-periodic', 'SetVariableMonitoring', {
+			setMonitoringData: [monitorData({ value: 2, type: 'Periodic', severity: 2 })],
+		});
+		harness.clock.advance(2000);
+		await harness.ready();
+		const events = harness.calls('NotifyEvent');
+		expect(events.length).toBeGreaterThan(0);
+		const event = (events[0]![3] as Record<string, unknown>)['eventData'] as Array<
+			Record<string, unknown>
+		>;
+		expect(event[0]).toMatchObject({ trigger: 'Periodic', variableMonitoringId: 1 });
+		await call(harness, 'mon-periodic-clear', 'ClearVariableMonitoring', { id: [1] });
+		const before = harness.calls('NotifyEvent').length;
+		harness.clock.advance(1000);
+		await harness.ready();
+		expect(harness.calls('NotifyEvent')).toHaveLength(before);
+	});
+
+	it('aligns clock-aligned monitors and cancels them on base changes', async () => {
+		const harness = createHarness201();
+		await harness.ready();
+		harness.clock.advance(2500);
+		await call(harness, 'mon-aligned', 'SetVariableMonitoring', {
+			setMonitoringData: [monitorData({ value: 2, type: 'PeriodicClockAligned', severity: 2 })],
+		});
+		harness.clock.advance(1400);
+		await harness.ready();
+		expect(harness.calls('NotifyEvent')).toHaveLength(0);
+		harness.clock.advance(100);
+		await harness.ready();
+		expect(harness.calls('NotifyEvent')).toHaveLength(1);
+		await harness.simulator.monitoring.setBase('FactoryDefault');
+		harness.clock.advance(4000);
+		await harness.ready();
+		expect(harness.calls('NotifyEvent')).toHaveLength(1);
+	});
+
 	it('emits monitor events when an update changes the threshold state', async () => {
 		const harness = createHarness201();
 		await harness.ready();
@@ -233,7 +273,7 @@ describe('Simulator201 device model', () => {
 			setMonitoringResult: [
 				{ status: 'UnknownComponent' },
 				{ status: 'UnknownVariable' },
-				{ status: 'UnsupportedMonitorType' },
+				{ status: 'Accepted' },
 				{ status: 'Rejected' },
 				{ status: 'UnsupportedMonitorType' },
 			],

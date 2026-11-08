@@ -51,6 +51,8 @@ import {
 	createDeviceModelHandlers,
 	createMonitoringState201,
 	evaluateMonitors201,
+	cancelMonitoringTimers201,
+	rearmMonitoringTimers201,
 	sendNotifyEvent201,
 	variableCharacteristics201,
 	type MonitoringBase201,
@@ -323,6 +325,7 @@ export function createSimulator201Profile(
 		restoreState: (value) => restoreSimulator201State(value),
 		onRestored: (engine) => {
 			rearmReservations201(engine);
+			rearmMonitoringTimers201(engine);
 			if (engine.isReady) {
 				for (const evse of engine.state.evses) {
 					if (evse.transaction !== null) {
@@ -334,6 +337,7 @@ export function createSimulator201Profile(
 		onReady: async (engine) => {
 			await sendAllStatusNotifications(engine);
 			rearmReservations201(engine);
+			rearmMonitoringTimers201(engine);
 			for (const evse of engine.state.evses) {
 				if (evse.transaction !== null) {
 					startMeterLoop(engine, evse.id, engine.getMeterValueIntervalMs());
@@ -341,6 +345,7 @@ export function createSimulator201Profile(
 			}
 		},
 		onTransportClose: (engine) => {
+			cancelMonitoringTimers201(engine);
 			const loops = meterLoops.get(engine);
 			if (loops !== undefined) {
 				for (const cancel of loops.values()) cancel();
@@ -881,6 +886,8 @@ async function applyPendingOperational(engine: EngineBase<Simulator201State>): P
 	}
 }
 
+const resetInProgress = new WeakSet<object>();
+
 function maybeRunPendingReset(engine: EngineBase<Simulator201State>): void {
 	const pending = engine.state.pendingResets;
 	if (pending.station) {
@@ -888,6 +895,7 @@ function maybeRunPendingReset(engine: EngineBase<Simulator201State>): void {
 		pending.station = false;
 		pending.evseIds = [];
 		emitResetNotice(engine);
+		engine.reboot('ScheduledReset');
 		return;
 	}
 	for (const evseId of [...pending.evseIds]) {
@@ -1532,27 +1540,58 @@ function registerInbound(engine: EngineBase<Simulator201State>): void {
 				await context.reply({ status: 'Rejected' });
 				return;
 			}
-			const active = targets.some(
-				(item) => item.transaction !== null && !item.transaction.stopping,
-			);
+			if (resetInProgress.has(engine)) {
+				await context.reply({ status: 'Rejected' });
+				return;
+			}
+			const active = targets.some((item) => item.transaction !== null);
 			if (type === 'OnIdle' && active) {
 				addPendingReset(engine, evseId);
 				await context.reply({ status: 'Scheduled' });
 				return;
 			}
 			clearPendingReset(engine, evseId);
-			await context.reply({ status: 'Accepted' });
-			if (type === 'OnIdle') {
-				emitResetNotice(engine);
-				return;
-			}
-			for (const evse of targets) {
-				await stopTransaction201(engine, evse.id, 'ImmediateReset', 'ResetCommand');
+			resetInProgress.add(engine);
+			let accepted = false;
+			try {
+				await context.reply({ status: 'Accepted' });
+				accepted = true;
+				for (const evse of targets) {
+					if (evse.transaction !== null) {
+						await stopTransaction201(engine, evse.id, 'ImmediateReset', 'ResetCommand');
+					}
+				}
+			} finally {
+				if (accepted) {
+					for (const evse of targets) {
+						if (evse.transaction !== null) {
+							stopMeterLoop(engine, evse.id);
+							evse.transaction = null;
+							evse.status = 'Available';
+							evse.updatedAt = engine.now();
+						}
+					}
+					if (evseId === undefined) {
+						engine.reboot(type === 'Immediate' ? 'RemoteReset' : 'ScheduledReset');
+					} else {
+						emitResetNotice(engine);
+					}
+				}
+				resetInProgress.delete(engine);
 			}
 		},
 		TriggerMessage: async (context) => {
 			const requested = stringValue(context.payload['requestedMessage'], '');
-			const supported = ['BootNotification', 'Heartbeat', 'StatusNotification', 'TransactionEvent'];
+			const supported = [
+				'BootNotification',
+				'Heartbeat',
+				'StatusNotification',
+				'TransactionEvent',
+				'MeterValues',
+				'FirmwareStatusNotification',
+				'LogStatusNotification',
+				'PublishFirmwareStatusNotification',
+			];
 			if (!supported.includes(requested)) {
 				await context.reply({ status: 'NotImplemented' });
 				return;
@@ -1564,6 +1603,64 @@ function registerInbound(engine: EngineBase<Simulator201State>): void {
 				}
 				await context.reply({ status: 'Accepted' });
 				await engine.bootNotification({ force: true, reason: 'Triggered' });
+				return;
+			}
+			if (requested === 'MeterValues') {
+				const evseRef = objectValue(context.payload['evse']);
+				const evseId = evseRef === undefined ? undefined : integerValue(evseRef['id']);
+				const targets =
+					evseId === undefined
+						? engine.state.evses
+						: engine.state.evses.filter((item) => item.id === evseId);
+				if (targets.length === 0) {
+					await context.reply({ status: 'Rejected' });
+					return;
+				}
+				await context.reply({ status: 'Accepted' });
+				for (const evse of targets) await sendMeterValues201(engine, evse.id);
+				return;
+			}
+			if (requested === 'FirmwareStatusNotification') {
+				const firmware = engine.state.services.firmware;
+				const status =
+					firmware.status === 'Installed' ||
+					firmware.status === 'InstallFailed' ||
+					firmware.status === 'DownloadFailed'
+						? 'Idle'
+						: (firmware.status ?? 'Idle');
+				await context.reply({ status: 'Accepted' });
+				await sendFirmwareStatus201(
+					engine,
+					status,
+					status === 'Idle' ? undefined : firmware.requestId,
+				);
+				return;
+			}
+			if (requested === 'LogStatusNotification') {
+				const log = engine.state.services.log;
+				if (log.status !== 'Uploading') {
+					await context.reply({ status: 'Rejected' });
+					return;
+				}
+				await context.reply({ status: 'Accepted' });
+				await sendLogStatus201(engine, 'Uploading', log.requestId);
+				return;
+			}
+			if (requested === 'PublishFirmwareStatusNotification') {
+				const firmware = engine.state.services.firmware;
+				const status = firmware.publishStatus;
+				if (status === undefined || status === 'Published') {
+					await context.reply({ status: 'Accepted' });
+					await sendPublishFirmwareStatus201(engine, 'Idle');
+					return;
+				}
+				await context.reply({ status: 'Accepted' });
+				await sendPublishFirmwareStatus201(
+					engine,
+					status,
+					firmware.publish === undefined ? undefined : [firmware.publish.location],
+					firmware.publish?.requestId,
+				);
 				return;
 			}
 			if (requested === 'TransactionEvent') {
@@ -2000,7 +2097,10 @@ export class Simulator201 extends EngineBase<Simulator201State> {
 					return Promise.resolve({ status: 'NotSupported' });
 				}
 				this.state.monitoring.base = base;
-				if (base !== 'All') this.state.monitoring.monitors = [];
+				if (base !== 'All') {
+					cancelMonitoringTimers201(this);
+					this.state.monitoring.monitors = [];
+				}
 				return Promise.resolve({ status: 'Accepted' });
 			},
 			setLevel: (severity) => {
