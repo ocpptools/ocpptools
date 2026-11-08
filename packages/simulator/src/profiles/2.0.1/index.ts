@@ -17,6 +17,17 @@ import {
 	type ChargingProfileState201,
 } from './charging.js';
 import {
+	createServicesHandlers,
+	createServicesState201,
+	removeTransactionDisplays201,
+	sendFirmwareStatus201,
+	sendLogStatus201,
+	sendNotifyCustomerInformation201,
+	sendNotifyDisplayMessages201,
+	sendPublishFirmwareStatus201,
+	type ServicesState201,
+} from './services.js';
+import {
 	createDeviceModelHandlers,
 	createMonitoringState201,
 	evaluateMonitors201,
@@ -114,6 +125,7 @@ export interface Simulator201State {
 	localAuthorization: LocalAuthorizationState201;
 	reservations: Reservation201[];
 	charging: ChargingProfileState201;
+	services: ServicesState201;
 }
 
 export interface Station201Options {
@@ -171,6 +183,7 @@ export function createSimulator201Profile(
 			localAuthorization: createLocalAuthorizationState201(),
 			reservations: [],
 			charging: createChargingProfileState201(),
+			services: createServicesState201(),
 		}),
 		bootPayload: (reason = 'PowerUp') => ({
 			chargingStation: {
@@ -582,6 +595,7 @@ export async function stopTransaction201(
 			transactionId: transaction.transactionId,
 		});
 		evse.transaction = null;
+		removeTransactionDisplays201(engine, transaction.transactionId);
 		engine.state.charging.profiles = engine.state.charging.profiles.filter(
 			(item) =>
 				!(item.evseId === evse.id && item.profile['chargingProfilePurpose'] === 'TxProfile'),
@@ -756,6 +770,14 @@ function registerInbound(engine: EngineBase<Simulator201State>): void {
 		ClearChargingProfile: { status: 'Unknown' },
 		GetChargingProfiles: { status: 'NoProfiles' },
 		GetCompositeSchedule: { status: 'Rejected' },
+		SetDisplayMessage: { status: 'Rejected' },
+		ClearDisplayMessage: { status: 'Unknown' },
+		GetDisplayMessages: { status: 'Unknown' },
+		CustomerInformation: { status: 'Rejected' },
+		UpdateFirmware: { status: 'Rejected' },
+		PublishFirmware: { status: 'Rejected' },
+		UnpublishFirmware: { status: 'NoFirmware' },
+		GetLog: { status: 'Rejected' },
 	};
 	const handlers: Record<string, (context: CallContext) => void | Promise<void>> = {
 		RequestStartTransaction: async (context) => {
@@ -1054,6 +1076,7 @@ function registerInbound(engine: EngineBase<Simulator201State>): void {
 	Object.assign(handlers, createDeviceModelHandlers(engine));
 	Object.assign(handlers, createLocalAuthHandlers(engine));
 	Object.assign(handlers, createChargingHandlers(engine));
+	Object.assign(handlers, createServicesHandlers(engine));
 
 	for (const [action, handler] of Object.entries(handlers)) {
 		engine.onCall(action, async (context) => {
@@ -1372,6 +1395,39 @@ export class Simulator201 extends EngineBase<Simulator201State> {
 
 	sendReservationStatusUpdate(reservationId: number, status: 'Expired' | 'Removed'): Promise<void> {
 		return sendReservationStatusUpdate201(this, reservationId, status);
+	}
+
+	sendFirmwareStatus(status: string, requestId?: number): Promise<void> {
+		return sendFirmwareStatus201(this, status, requestId);
+	}
+
+	sendPublishFirmwareStatus(
+		status: string,
+		location?: string[],
+		requestId?: number,
+	): Promise<void> {
+		return sendPublishFirmwareStatus201(this, status, location, requestId);
+	}
+
+	sendLogStatus(status: string, requestId?: number): Promise<void> {
+		return sendLogStatus201(this, status, requestId);
+	}
+
+	sendNotifyDisplayMessages(
+		requestId: number,
+		messageInfo: JsonObject[],
+		tbc = false,
+	): Promise<void> {
+		return sendNotifyDisplayMessages201(this, requestId, messageInfo, tbc);
+	}
+
+	sendNotifyCustomerInformation(
+		requestId: number,
+		data: string,
+		seqNo = 0,
+		tbc = false,
+	): Promise<void> {
+		return sendNotifyCustomerInformation201(this, requestId, data, seqNo, tbc);
 	}
 
 	sendNotifyChargingLimit(source: 'EMS' | 'Other' | 'SO' | 'CSO', evseId?: number): Promise<void> {
