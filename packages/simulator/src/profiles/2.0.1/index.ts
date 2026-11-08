@@ -8,6 +8,15 @@ import { SimulatorError } from '../../errors.js';
 import type { CallContext } from '../../rpc.js';
 import type { CommonSimulatorOptions } from '../../state.js';
 import {
+	createChargingHandlers,
+	createChargingProfileState201,
+	sendClearedChargingLimit201,
+	sendNotifyChargingLimit201,
+	sendNotifyEVChargingNeeds201,
+	sendNotifyEVChargingSchedule201,
+	type ChargingProfileState201,
+} from './charging.js';
+import {
 	createDeviceModelHandlers,
 	createMonitoringState201,
 	evaluateMonitors201,
@@ -104,6 +113,7 @@ export interface Simulator201State {
 	networkProfiles: NetworkProfile201[];
 	localAuthorization: LocalAuthorizationState201;
 	reservations: Reservation201[];
+	charging: ChargingProfileState201;
 }
 
 export interface Station201Options {
@@ -160,6 +170,7 @@ export function createSimulator201Profile(
 			networkProfiles: [],
 			localAuthorization: createLocalAuthorizationState201(),
 			reservations: [],
+			charging: createChargingProfileState201(),
 		}),
 		bootPayload: (reason = 'PowerUp') => ({
 			chargingStation: {
@@ -571,6 +582,10 @@ export async function stopTransaction201(
 			transactionId: transaction.transactionId,
 		});
 		evse.transaction = null;
+		engine.state.charging.profiles = engine.state.charging.profiles.filter(
+			(item) =>
+				!(item.evseId === evse.id && item.profile['chargingProfilePurpose'] === 'TxProfile'),
+		);
 		evse.chargingPowerKw = evse.defaultChargingPowerKw;
 		if (pendingOperational === 'Inoperative') {
 			// The transaction is over: the state to restore later is Available,
@@ -737,6 +752,10 @@ function registerInbound(engine: EngineBase<Simulator201State>): void {
 		SendLocalList: { status: 'Rejected' },
 		ReserveNow: { status: 'Rejected' },
 		CancelReservation: { status: 'Rejected' },
+		SetChargingProfile: { status: 'Rejected' },
+		ClearChargingProfile: { status: 'Unknown' },
+		GetChargingProfiles: { status: 'NoProfiles' },
+		GetCompositeSchedule: { status: 'Rejected' },
 	};
 	const handlers: Record<string, (context: CallContext) => void | Promise<void>> = {
 		RequestStartTransaction: async (context) => {
@@ -1034,6 +1053,7 @@ function registerInbound(engine: EngineBase<Simulator201State>): void {
 
 	Object.assign(handlers, createDeviceModelHandlers(engine));
 	Object.assign(handlers, createLocalAuthHandlers(engine));
+	Object.assign(handlers, createChargingHandlers(engine));
 
 	for (const [action, handler] of Object.entries(handlers)) {
 		engine.onCall(action, async (context) => {
@@ -1352,6 +1372,26 @@ export class Simulator201 extends EngineBase<Simulator201State> {
 
 	sendReservationStatusUpdate(reservationId: number, status: 'Expired' | 'Removed'): Promise<void> {
 		return sendReservationStatusUpdate201(this, reservationId, status);
+	}
+
+	sendNotifyChargingLimit(source: 'EMS' | 'Other' | 'SO' | 'CSO', evseId?: number): Promise<void> {
+		return sendNotifyChargingLimit201(this, source, evseId);
+	}
+
+	sendClearedChargingLimit(source: 'EMS' | 'Other' | 'SO' | 'CSO', evseId?: number): Promise<void> {
+		return sendClearedChargingLimit201(this, source, evseId);
+	}
+
+	sendNotifyEVChargingNeeds(
+		evseId: number,
+		mode: 'DC' | 'AC_single_phase' | 'AC_two_phase' | 'AC_three_phase' = 'AC_three_phase',
+		extra: JsonObject = {},
+	): Promise<void> {
+		return sendNotifyEVChargingNeeds201(this, evseId, mode, extra);
+	}
+
+	sendNotifyEVChargingSchedule(evseId: number, chargingSchedule: JsonObject): Promise<void> {
+		return sendNotifyEVChargingSchedule201(this, evseId, chargingSchedule);
 	}
 
 	setEvseStatus(evseId: number, status: EvseStatus201): void {
