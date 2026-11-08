@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { Simulator16 } from '../src/1.6.js';
 import { FakeClock, flushMicrotasks } from './helpers/fake-clock.js';
 import { FakeTransportFactory, type FakeTransport } from './helpers/fake-transport.js';
+import { expectSchemaValid } from './helpers/schema-validator.js';
 
 function autoRespond(transport: FakeTransport): void {
 	const send = transport.send.bind(transport);
@@ -81,7 +82,7 @@ describe('Simulator16 flows', () => {
 			['RemoteStartTransaction', { connectorId: 1, idTag: 'A' }],
 			['RemoteStopTransaction', { transactionId: 1 }],
 			['ChangeConfiguration', { key: 'HeartbeatInterval', value: '30' }],
-			['Reset', { type: 'Immediate' }],
+			['Reset', { type: 'Hard' }],
 			['TriggerMessage', { requestedMessage: 'Heartbeat' }],
 			['GetConfiguration', {}],
 			['ChangeAvailability', { connectorId: 1, type: 'Operative' }],
@@ -104,7 +105,23 @@ describe('Simulator16 flows', () => {
 			],
 			['CancelReservation', { reservationId: 1 }],
 			['DataTransfer', { vendorId: 'x' }],
-			['SetChargingProfile', { connectorId: 1 }],
+			[
+				'SetChargingProfile',
+				{
+					connectorId: 1,
+					csChargingProfiles: {
+						chargingProfileId: 1,
+						stackLevel: 1,
+						chargingProfilePurpose: 'TxDefaultProfile',
+						chargingProfileKind: 'Absolute',
+						chargingSchedule: {
+							chargingRateUnit: 'W',
+							duration: 3600,
+							chargingSchedulePeriod: [{ startPeriod: 0, limit: 1000 }],
+						},
+					},
+				},
+			],
 			['ClearChargingProfile', {}],
 			['GetCompositeSchedule', { connectorId: 1, duration: 60 }],
 		];
@@ -113,12 +130,31 @@ describe('Simulator16 flows', () => {
 			const messageId = `in-${action}`;
 			simulator.rpc.handleText(JSON.stringify([2, messageId, action, payload]));
 			await flushMicrotasks(80);
-			expect(
-				transport.sent.some((text) => text.includes(`[3,"${messageId}"`)),
-				`${action} did not reply`,
-			).toBe(true);
+			const replyText = transport.sent.find((text) => text.startsWith(`[3,"${messageId}"`));
+			expect(replyText, `${action} did not reply`).toBeDefined();
+			await expectSchemaValid('1.6', JSON.parse(replyText!) as unknown, action);
 			simulator.dispose();
 		}
+	});
+
+	it('emits schema-valid 1.6 charge-point actions', async () => {
+		const { simulator, transport } = await readySimulator();
+		await simulator.authorize('A');
+		await simulator.bootNotification({ force: true });
+		await simulator.sendHeartbeat();
+		await simulator.sendStatusNotification(1, 'Available');
+		await simulator.startChargingSession(1, 'A');
+		await simulator.sendMeterValues(1);
+		await simulator.stopTransaction(1);
+		await simulator.sendDiagnosticsStatus('Idle');
+		await simulator.sendFirmwareStatus('Idle');
+		await simulator.sendDataTransfer({ vendorId: 'x' });
+		const calls = transport.sent
+			.map((text) => JSON.parse(text) as unknown[])
+			.filter((frame) => frame[0] === 2);
+		expect(calls.length).toBeGreaterThanOrEqual(10);
+		for (const frame of calls) await expectSchemaValid('1.6', frame);
+		simulator.dispose();
 	});
 
 	it('honors the inbound reject mode and invalid remote start', async () => {
