@@ -360,6 +360,8 @@ const s201 = await import('@ocpptools/simulator/2.0.1');
 const browser = await import('@ocpptools/simulator/browser');
 assert.equal(s16.SIMULATOR_PROTOCOL_VERSION, '1.6');
 assert.equal(s201.SIMULATOR_PROTOCOL_VERSION, '2.0.1');
+assert.equal(typeof s16.Simulator16, 'function');
+assert.equal(typeof s201.Simulator201, 'function');
 assert.equal(browser.SIMULATOR_BROWSER_ENTRY, true);
 const { readFileSync } = await import('node:fs');
 const { createRequire } = await import('node:module');
