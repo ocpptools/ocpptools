@@ -5,6 +5,19 @@
 export const SIMULATOR_NAME = '@ocpptools/simulator';
 
 export { Scheduler } from './clock.js';
+export { EngineBase } from './engine.js';
+export type { BootResponse, EngineProfile, EngineState } from './engine.js';
+export { Metrics } from './metrics.js';
+export type { RttStat, SimulatorMetrics } from './metrics.js';
+export type {
+	BootOptions,
+	BootSnapshot,
+	BootStatus,
+	CommonSimulatorOptions,
+	FaultConfig,
+	SimulatorStateBase,
+	TimingOptions,
+} from './state.js';
 export { Connection } from './connection.js';
 export type { ConnectionOptions, ConnectionSnapshot, ReconnectOptions } from './connection.js';
 export { OfflineQueue } from './queue.js';
