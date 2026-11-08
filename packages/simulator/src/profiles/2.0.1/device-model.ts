@@ -33,6 +33,8 @@ export interface MonitoringState201 {
 	eventIdSeq: number;
 }
 
+const monitorTimers = new WeakMap<object, Map<number, () => void>>();
+
 export interface NetworkProfile201 {
 	configurationSlot: number;
 	connectionData: JsonObject;
@@ -106,6 +108,7 @@ export function createDeviceModelHandlers(
 			engine.state.monitoring.base = base;
 			if (base !== 'All') {
 				// There are no hardwired or factory monitors in the simulator.
+				cancelMonitoringTimers201(engine);
 				engine.state.monitoring.monitors = [];
 			}
 			await context.reply({ status: 'Accepted' });
@@ -330,7 +333,7 @@ function monitorEvent(
 	engine: EngineBase<Simulator201State>,
 	monitor: VariableMonitor201,
 	actual: number,
-	trigger: 'Alerting' | 'Delta',
+	trigger: 'Alerting' | 'Delta' | 'Periodic',
 	cleared = false,
 ): JsonObject {
 	if (!cleared && (monitor.type === 'UpperThreshold' || monitor.type === 'LowerThreshold')) {
@@ -357,6 +360,73 @@ function monitorEvent(
 	};
 }
 
+function cancelMonitorTimer(engine: EngineBase<Simulator201State>, id: number): void {
+	const timers = monitorTimers.get(engine);
+	const cancel = timers?.get(id);
+	cancel?.();
+	timers?.delete(id);
+}
+
+function armPeriodicMonitor(
+	engine: EngineBase<Simulator201State>,
+	monitor: VariableMonitor201,
+): void {
+	cancelMonitorTimer(engine, monitor.id);
+	if (monitor.type !== 'Periodic' && monitor.type !== 'PeriodicClockAligned') return;
+	const timers = monitorTimers.get(engine) ?? new Map<number, () => void>();
+	monitorTimers.set(engine, timers);
+	const intervalMs = Math.max(1000, monitor.value * 1000);
+	let cancelled = false;
+	let current: (() => void) | undefined;
+	const cancel = (): void => {
+		cancelled = true;
+		current?.();
+		current = undefined;
+	};
+	const schedule = (): void => {
+		if (cancelled) return;
+		const delay =
+			monitor.type === 'PeriodicClockAligned'
+				? intervalMs - (Date.parse(engine.ocppNow()) % intervalMs)
+				: intervalMs;
+		current = engine.scheduler.setTimeout(() => {
+			current = undefined;
+			if (cancelled || !engine.state.monitoring.monitors.includes(monitor)) return;
+			void (async () => {
+				if (monitor.severity > engine.state.monitoring.level) return;
+				const hasTransaction = engine.state.evses.some((evse) => evse.transaction !== null);
+				if (monitor.transaction && !hasTransaction) return;
+				const componentName = stringValue(monitor.component['name'], '');
+				const variableName = stringValue(monitor.variable['name'], '');
+				const raw = engine.state.variables[`${componentName}/${variableName}`];
+				if (raw === undefined) return;
+				const numeric = Number(raw);
+				if (!Number.isFinite(numeric)) return;
+				const event = monitorEvent(engine, monitor, numeric, 'Periodic');
+				await sendNotifyEvent201(engine, event).catch((error: unknown) =>
+					reportDeviceModelError(engine, error),
+				);
+			})().finally(schedule);
+		}, delay);
+	};
+	schedule();
+	timers.set(monitor.id, cancel);
+}
+
+export function cancelMonitoringTimers201(engine: EngineBase<Simulator201State>): void {
+	const timers = monitorTimers.get(engine);
+	if (timers === undefined) return;
+	for (const cancel of timers.values()) cancel();
+	timers.clear();
+}
+
+export function rearmMonitoringTimers201(engine: EngineBase<Simulator201State>): void {
+	cancelMonitoringTimers201(engine);
+	for (const monitor of engine.state.monitoring.monitors) {
+		armPeriodicMonitor(engine, monitor);
+	}
+}
+
 function setMonitor(
 	engine: EngineBase<Simulator201State>,
 	item: Record<string, unknown>,
@@ -381,7 +451,13 @@ function setMonitor(
 		result['status'] = 'UnknownVariable';
 		return result;
 	}
-	if (type !== 'UpperThreshold' && type !== 'LowerThreshold' && type !== 'Delta') {
+	if (
+		type !== 'UpperThreshold' &&
+		type !== 'LowerThreshold' &&
+		type !== 'Delta' &&
+		type !== 'Periodic' &&
+		type !== 'PeriodicClockAligned'
+	) {
 		result['status'] = 'UnsupportedMonitorType';
 		return result;
 	}
@@ -389,7 +465,9 @@ function setMonitor(
 		result['status'] = 'UnsupportedMonitorType';
 		return result;
 	}
-	if (type === 'Delta' && value <= 0) return result;
+	if ((type === 'Delta' || type === 'Periodic' || type === 'PeriodicClockAligned') && value <= 0) {
+		return result;
+	}
 	if (id !== undefined) {
 		const existing = engine.state.monitoring.monitors.find((monitor) => monitor.id === id);
 		if (existing === undefined) return result;
@@ -417,6 +495,7 @@ function setMonitor(
 		existing.lastReportedValue = null;
 		result['status'] = 'Accepted';
 		result['id'] = id;
+		armPeriodicMonitor(engine, existing);
 		if (type === 'Delta') {
 			existing.triggered = false;
 			return result;
@@ -446,7 +525,7 @@ function setMonitor(
 	}
 	const newId = engine.state.monitoring.nextId;
 	engine.state.monitoring.nextId += 1;
-	engine.state.monitoring.monitors.push({
+	const monitor: VariableMonitor201 = {
 		id: newId,
 		component,
 		variable,
@@ -456,7 +535,9 @@ function setMonitor(
 		transaction,
 		triggered: false,
 		lastReportedValue: null,
-	});
+	};
+	engine.state.monitoring.monitors.push(monitor);
+	armPeriodicMonitor(engine, monitor);
 	result['status'] = 'Accepted';
 	result['id'] = newId;
 	return result;
@@ -465,6 +546,7 @@ function setMonitor(
 function clearMonitor(engine: EngineBase<Simulator201State>, id: number): JsonObject {
 	const index = engine.state.monitoring.monitors.findIndex((monitor) => monitor.id === id);
 	if (index < 0) return { status: 'NotFound', id };
+	cancelMonitorTimer(engine, id);
 	engine.state.monitoring.monitors.splice(index, 1);
 	return { status: 'Accepted', id };
 }

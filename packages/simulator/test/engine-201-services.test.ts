@@ -41,6 +41,28 @@ function displayMessage(overrides: Record<string, unknown> = {}): Record<string,
 }
 
 describe('Simulator201 services', () => {
+	it('filters display messages by their start and end dates', async () => {
+		const harness = createHarness201();
+		await harness.ready();
+		await call(harness, 'disp-window-1', 'SetDisplayMessage', {
+			message: displayMessage({
+				startDateTime: '2026-01-01T00:01:00Z',
+				endDateTime: '2026-01-01T00:02:00Z',
+			}),
+		});
+		expect(
+			await call(harness, 'disp-window-2', 'GetDisplayMessages', { requestId: 1, id: [1] }),
+		).toEqual({ status: 'Unknown' });
+		harness.clock.advance(60_000);
+		expect(
+			await call(harness, 'disp-window-3', 'GetDisplayMessages', { requestId: 2, id: [1] }),
+		).toEqual({ status: 'Accepted' });
+		harness.clock.advance(60_000);
+		expect(
+			await call(harness, 'disp-window-4', 'GetDisplayMessages', { requestId: 3, id: [1] }),
+		).toEqual({ status: 'Unknown' });
+	});
+
 	it('stores, reports, and clears display messages', async () => {
 		const harness = createHarness201();
 		await harness.ready();

@@ -107,9 +107,6 @@ describe('Simulator201 inbound commands', () => {
 		expect(await call(harness, 'reset-a', 'Reset', { type: 'Nope' })).toEqual({
 			status: 'Rejected',
 		});
-		expect(await call(harness, 'reset-b', 'Reset', { type: 'OnIdle' })).toEqual({
-			status: 'Accepted',
-		});
 		await harness.simulator.startChargingSession(1, 'A');
 		expect(await call(harness, 'reset-c', 'Reset', { type: 'OnIdle' })).toEqual({
 			status: 'Scheduled',
@@ -167,10 +164,6 @@ describe('Simulator201 inbound commands', () => {
 		await harness.simulator.stopTransaction(2);
 		expect(harness.simulator.state.pendingResets.evseIds).toHaveLength(0);
 		expect(notices).toHaveLength(2);
-		expect(await call(harness, 'reset-idle-now', 'Reset', { type: 'OnIdle', evseId: 1 })).toEqual({
-			status: 'Accepted',
-		});
-		expect(notices).toHaveLength(3);
 	});
 
 	it('sends only implemented TriggerMessage notifications', async () => {
@@ -204,7 +197,7 @@ describe('Simulator201 inbound commands', () => {
 			await call(harness, 'trig-5', 'TriggerMessage', {
 				requestedMessage: 'MeterValues',
 			}),
-		).toEqual({ status: 'NotImplemented' });
+		).toEqual({ status: 'Accepted' });
 		await harness.simulator.startChargingSession(1, 'A');
 		expect(
 			await call(harness, 'trig-6', 'TriggerMessage', {

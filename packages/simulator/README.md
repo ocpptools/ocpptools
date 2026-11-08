@@ -197,8 +197,12 @@ are handled:
 The advanced features use simulated state. Certificates are in-memory records
 without ASN.1 parsing, WebCrypto, or real 15118 exchanges. Firmware and logs are
 state machines, not real flashing or uploads. Monitoring thresholds and
-composite schedules are calculated from stored state. No feature claims
-conformance evidence.
+composite schedules are calculated from stored state. Periodic and clock-aligned
+monitors run on the injected scheduler and emit `NotifyEvent` records. Display
+messages honor their start and end dates. Station-level `Reset` stops
+transactions and reboots the transport; EVSE-scoped resets stop only that EVSE. `UnlockConnector` follows the specification and returns
+`OngoingAuthorizedTransaction` while a transaction is active instead of stopping
+it. No feature claims conformance evidence.
 
 ### Transactions
 

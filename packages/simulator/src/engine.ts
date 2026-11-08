@@ -111,6 +111,7 @@ export class EngineBase<S extends object> {
 	private ready = false;
 	private disposed = false;
 	private rebootBoot = false;
+	private rebootReason: string | undefined;
 	private session = 0;
 	private heartbeatCancel: (() => void) | undefined;
 	private bootRetryCancel: (() => void) | undefined;
@@ -251,8 +252,9 @@ export class EngineBase<S extends object> {
 	}
 
 	/** Drops the current transport and starts a fresh boot cycle. */
-	reboot(): void {
+	reboot(reason = 'PowerUp'): void {
 		this.assertActive();
+		this.rebootReason = reason;
 		this.ready = false;
 		this.boot = { status: 'not-booted' };
 		this.clockOffsetMs = 0;
@@ -897,7 +899,11 @@ export class EngineBase<S extends object> {
 		}
 		if (this.bootOptions.auto || this.rebootBoot) {
 			this.rebootBoot = false;
-			void this.bootNotification().catch((error: unknown) => this.reportBackgroundError(error));
+			const reason = this.rebootReason ?? 'PowerUp';
+			this.rebootReason = undefined;
+			void this.bootNotification({ reason }).catch((error: unknown) =>
+				this.reportBackgroundError(error),
+			);
 		}
 	}
 
