@@ -45,8 +45,12 @@ parity against the live site validators. It is published with `core` and
 
 Extract `@ocpptools/simulator` as a headless protocol engine. Split the current
 DOM-coupled website code into RPC, connection, state, protocol flows, and
-transport adapters. The browser transport lives in a subpath; the Node adapter
-comes with the CLI. Validate against a mock CSMS.
+transport adapters. Browser transport lives in a subpath; the Node adapter comes
+with the CLI. Validate against a mock CSMS.
+
+Status: implemented for all 28 OCPP 1.6J actions and all 64 OCPP 2.0.1 actions,
+with the browser adapter, deterministic tests, and 0.1.0 release. The site
+migration follows the release.
 
 ## Phase 5 — Builder
 

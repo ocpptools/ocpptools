@@ -6,7 +6,8 @@ and message construction for OCPP 1.6J and 2.0.1.
 
 > **Status:** alpha. `@ocpptools/core`, `@ocpptools/schema-utils`, and
 > `@ocpptools/validator` 0.2.0 are published on npm, together with
-> `@ocpptools/schemas` 0.1.0. APIs are unstable until 1.0.0.
+> `@ocpptools/schemas` 0.1.0 and `@ocpptools/simulator` 0.1.0. APIs are
+> unstable until 1.0.0.
 
 ## What this repository is
 
@@ -29,7 +30,7 @@ and message construction for OCPP 1.6J and 2.0.1.
 | `@ocpptools/core`         | Alpha   | OCPP types, frames, parser/serializer, transport interfaces        |
 | `@ocpptools/schema-utils` | Alpha   | JSON Schema normalization and field metadata                       |
 | `@ocpptools/validator`    | Alpha   | Ajv-based validation with an injectable schema registry            |
-| `@ocpptools/simulator`    | Planned | Headless charging-station simulator with injectable transports     |
+| `@ocpptools/simulator`    | Alpha   | Headless charging-station simulator with injectable transports     |
 | `@ocpptools/builder`      | Planned | Headless payload and frame construction                            |
 | `@ocpptools/schemas`      | Alpha   | Unmodified OCA JSON Schemas (CC BY-ND 4.0, © Open Charge Alliance) |
 
