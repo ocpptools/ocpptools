@@ -49,8 +49,9 @@ transport adapters. Browser transport lives in a subpath; the Node adapter comes
 with the CLI. Validate against a mock CSMS.
 
 Status: implemented for all 28 OCPP 1.6J actions and all 64 OCPP 2.0.1 actions,
-with the browser adapter, deterministic tests, and 0.1.0 release. The site
-migration follows the release.
+with the browser adapter, schema-valid action matrices, fault injection,
+outbound validation, metrics, scenarios, snapshots, completed 1.6 semantics,
+and hardened 2.0.1 features. 0.2.0 is published. The site UI migration remains.
 
 ## Phase 5 — Builder
 
