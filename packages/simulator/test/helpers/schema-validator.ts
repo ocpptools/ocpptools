@@ -6,7 +6,11 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { OcppVersion } from '@ocpptools/core';
-import { createSchemaRegistry, createValidator, type Validator } from '@ocpptools/validator';
+import {
+	createSchemaRegistry,
+	createValidator,
+	type Validator,
+} from '../../../validator/src/index.js';
 
 const schemaRoot = fileURLToPath(new URL('../../../schemas/schemas', import.meta.url));
 const validators = new Map<OcppVersion, Validator>();
