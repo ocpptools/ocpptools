@@ -29,6 +29,7 @@ export type {
 } from './profiles/2.0.1/local-auth.js';
 export type { ChargingProfile201, ChargingProfileState201 } from './profiles/2.0.1/charging.js';
 export type { DisplayMessage201, ServicesState201 } from './profiles/2.0.1/services.js';
+export type { SecurityState201, SimulatedCertificate201 } from './profiles/2.0.1/security.js';
 
 /** The OCPP version of this entrypoint. */
 export const SIMULATOR_PROTOCOL_VERSION = '2.0.1' as const;

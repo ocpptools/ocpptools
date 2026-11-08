@@ -78,6 +78,9 @@ export function installResponder(transport: FakeTransport, options: ResponderOpt
 			Heartbeat: { currentTime: '2026-01-01T00:00:00Z' },
 			MeterValues: {},
 			NotifyReport: {},
+			SignCertificate: { status: 'Accepted' },
+			Get15118EVCertificate: { status: 'Accepted', exiResponse: 'exi-response' },
+			GetCertificateStatus: { status: 'Accepted', ocspResult: 'ocsp-response' },
 		};
 		transport.receive(JSON.stringify([3, messageId, responses[action] ?? {}]));
 	};
