@@ -9,6 +9,8 @@
   "include": [
     "packages/core/src/**/*.ts",
     "packages/schema-utils/src/**/*.ts",
-    "packages/validator/src/**/*.ts"
-  ]
+    "packages/validator/src/**/*.ts",
+    "packages/simulator/src/**/*.ts"
+  ],
+  "exclude": ["packages/simulator/src/browser/**/*.ts"]
 }

@@ -1391,6 +1391,10 @@ export class Simulator201 extends EngineBase<Simulator201State> {
 		return sendMeterValues201(this, evseId);
 	}
 
+	sendDataTransfer(payload: JsonObject): Promise<JsonObject> {
+		return this.sendCall('DataTransfer', payload);
+	}
+
 	sendNotifyEvent(
 		component: string,
 		variable: string,
