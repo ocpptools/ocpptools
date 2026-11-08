@@ -35,6 +35,7 @@ export {
 } from './profiles/1.6/index.js';
 export type {
 	ActiveTransaction16,
+	ChargingProfile16,
 	CompletedTransaction16,
 	Connector16,
 	ConnectorStatus16,

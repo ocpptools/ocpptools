@@ -229,6 +229,97 @@ describe('persistence', () => {
 		second.simulator.dispose();
 	});
 
+	it('round-trips 1.6 configuration, status flows, availability, and profiles', () => {
+		const storage = new MemoryStorage();
+		const first = create16(storage);
+		first.simulator.state.configuration = { HeartbeatInterval: '30' };
+		first.simulator.state.diagnosticsStatus = 'Uploaded';
+		first.simulator.state.firmwareStatus = 'Installed';
+		first.simulator.getConnector(1)!.pendingAvailability = 'Inoperative';
+		first.simulator.state.chargingProfiles = [
+			{
+				connectorId: 1,
+				id: 3,
+				stackLevel: 1,
+				purpose: 'TxDefaultProfile',
+				kind: 'Absolute',
+				schedule: {
+					chargingRateUnit: 'W',
+					duration: 3600,
+					chargingSchedulePeriod: [{ startPeriod: 0, limit: 7000 }],
+				},
+				periods: [{ startPeriod: 0, limit: 7000 }],
+				validFrom: '2020-01-01T00:00:00Z',
+			},
+		];
+		const snapshot = first.simulator.exportSnapshot();
+		const second = create16(storage);
+		expect(second.simulator.restoreSnapshot(snapshot)).toEqual({ restored: true });
+		expect(second.simulator.state.configuration).toEqual({ HeartbeatInterval: '30' });
+		expect(second.simulator.state.diagnosticsStatus).toBe('Uploaded');
+		expect(second.simulator.state.firmwareStatus).toBe('Installed');
+		expect(second.simulator.getConnector(1)?.pendingAvailability).toBe('Inoperative');
+		expect(second.simulator.state.chargingProfiles[0]).toMatchObject({
+			id: 3,
+			purpose: 'TxDefaultProfile',
+			validFrom: '2020-01-01T00:00:00Z',
+		});
+		first.simulator.dispose();
+		second.simulator.dispose();
+	});
+
+	it('does not persist a pending reboot drain flag', async () => {
+		const storage = new MemoryStorage();
+		const first = create16(storage);
+		first.simulator.state.pendingReboot = true;
+		const snapshot = first.simulator.exportSnapshot();
+		const second = create16(storage);
+		expect(second.simulator.restoreSnapshot(snapshot)).toEqual({ restored: true });
+		expect(second.simulator.state.pendingReboot).toBeUndefined();
+		await open(second.simulator, second.factory);
+		await expect(second.simulator.startChargingSession(1, 'TAG')).resolves.toMatchObject({
+			ok: true,
+		});
+		first.simulator.dispose();
+		second.simulator.dispose();
+	});
+
+	it('does not persist undefined optional state after stop, availability, or reset', async () => {
+		const storage = new MemoryStorage();
+		const first = create16(storage);
+		await open(first.simulator, first.factory);
+		await first.simulator.startChargingSession(1, 'TAG');
+		first.simulator.rpc.handleText(
+			'[2,"avail-opt","ChangeAvailability",{"connectorId":1,"type":"Inoperative"}]',
+		);
+		await flushMicrotasks(30);
+		expect(first.simulator.getConnector(1)?.pendingAvailability).toBe('Inoperative');
+		expect(() => first.simulator.exportSnapshot()).not.toThrow();
+		await first.simulator.stopTransaction(1);
+		expect(() => first.simulator.exportSnapshot()).not.toThrow();
+		first.simulator.rpc.handleText('[2,"reset-opt","Reset",{"type":"Hard"}]');
+		await flushMicrotasks(60);
+		expect(() => first.simulator.exportSnapshot()).not.toThrow();
+		first.simulator.dispose();
+	});
+
+	it('cancels restored status flows', async () => {
+		const storage = new MemoryStorage();
+		const first = create16(storage);
+		await open(first.simulator, first.factory);
+		first.simulator.rpc.handleText(
+			'[2,"diag-restore","GetDiagnostics",{"location":"https://example.test"}]',
+		);
+		await flushMicrotasks(30);
+		const snapshot = first.simulator.exportSnapshot();
+		expect(first.simulator.state.diagnosticsStatus).toBe('Uploading');
+		expect(first.simulator.restoreSnapshot(snapshot)).toEqual({ restored: true });
+		first.clock.advance(1000);
+		await flushMicrotasks(30);
+		expect(first.simulator.state.diagnosticsStatus).toBe('Uploading');
+		first.simulator.dispose();
+	});
+
 	it('restores a queued snapshot with the same message IDs', async () => {
 		const storage = new MemoryStorage();
 		const first = create16(storage, { bootRequired: true });

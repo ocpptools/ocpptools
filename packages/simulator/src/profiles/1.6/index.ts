@@ -42,6 +42,20 @@ export interface Reservation16 {
 	idTag: string;
 }
 
+export interface ChargingProfile16 {
+	connectorId: number;
+	id: number;
+	stackLevel: number;
+	purpose: string;
+	kind: string;
+	schedule: JsonObject;
+	periods: Array<{ startPeriod: number; limit: number; numberPhases?: number }>;
+	validFrom?: string;
+	validTo?: string;
+	transactionId?: number;
+	receivedAt?: number;
+}
+
 export interface Connector16 {
 	id: number;
 	status: ConnectorStatus16;
@@ -50,6 +64,7 @@ export interface Connector16 {
 	chargingPowerKw: number;
 	activeTransaction: ActiveTransaction16 | null;
 	reservation: Reservation16 | null;
+	pendingAvailability?: 'Operative' | 'Inoperative';
 	updatedAt: number;
 }
 
@@ -76,9 +91,13 @@ export interface Simulator16State {
 	localAuthorizationList: LocalAuthorizationEntry[];
 	localListVersion: number;
 	lastTransactionSeq: number;
-	chargingProfiles: JsonObject[];
+	chargingProfiles: ChargingProfile16[];
 	compositeSchedules: Record<string, JsonObject>;
 	defaultIdTag: string;
+	configuration?: Record<string, string>;
+	diagnosticsStatus?: string;
+	firmwareStatus?: string;
+	pendingReboot?: boolean;
 }
 
 export interface Station16Options {
@@ -122,7 +141,7 @@ export interface Simulator16ReservationsApi {
 }
 
 export interface Simulator16ChargingProfilesApi {
-	list(): JsonObject[];
+	list(): ChargingProfile16[];
 	clear(): void;
 }
 
@@ -132,6 +151,253 @@ export interface Simulator16AvailabilityApi {
 }
 
 const meterLoops = new WeakMap<object, Map<number, () => void>>();
+const reservationTimers = new WeakMap<object, Map<number, () => void>>();
+const statusFlows = new WeakMap<object, Map<string, Array<() => void>>>();
+const MAX_TIMER_DELAY = 2_147_483_647;
+const stopOperations = new WeakMap<object, Promise<void>>();
+
+const CONFIGURATION_BOOLEAN_KEYS: readonly string[] = [
+	'LocalAuthListEnabled',
+	'AuthorizationCacheEnabled',
+	'AllowOfflineTxForUnknownId',
+	'StopTransactionOnEVSideDisconnect',
+];
+const CONFIGURATION_NUMERIC_KEYS: readonly string[] = [
+	'ConnectionTimeOut',
+	'ClockAlignedDataInterval',
+	'ResetRetries',
+	'LocalAuthListMaxLength',
+	'SendLocalListMaxLength',
+	'TransactionMessageAttempts',
+	'TransactionMessageRetryInterval',
+];
+const READONLY_CONFIGURATION_KEYS: readonly string[] = [
+	'SupportedFeatureProfiles',
+	'ChargePointVendor',
+	'ChargePointModel',
+	'ChargePointSerialNumber',
+	'FirmwareVersion',
+	'NumberOfConnectors',
+	'LocalAuthListMaxLength',
+	'SendLocalListMaxLength',
+];
+
+interface ConfigurationEntry16 {
+	readonly key: string;
+	readonly readonly: boolean;
+	readonly value: string;
+}
+
+function configurationEntries16(
+	engine: EngineBase<Simulator16State>,
+	station: Station16Options,
+): ConfigurationEntry16[] {
+	const stored = engine.state.configuration ?? {};
+	const fallback: Record<string, string> = {
+		HeartbeatInterval: String(engine.getHeartbeatIntervalMs() / 1000),
+		MeterValueSampleInterval: String(engine.getMeterValueIntervalMs() / 1000),
+		ConnectionTimeOut: '60',
+		MeterValuesAlignedData: '',
+		ClockAlignedDataInterval: '0',
+		ResetRetries: '3',
+		LocalAuthListEnabled: 'true',
+		LocalAuthListMaxLength: '1000',
+		SendLocalListMaxLength: '1000',
+		AuthorizationCacheEnabled: 'false',
+		AllowOfflineTxForUnknownId: 'false',
+		TransactionMessageAttempts: '3',
+		TransactionMessageRetryInterval: '60',
+		StopTransactionOnEVSideDisconnect: 'true',
+		SupportedFeatureProfiles:
+			'Core,SmartCharging,LocalAuthListManagement,RemoteTrigger,Reservation,FirmwareManagement',
+		ChargePointVendor: station.vendor,
+		ChargePointModel: station.model,
+		ChargePointSerialNumber: '',
+		FirmwareVersion: station.firmwareVersion,
+		NumberOfConnectors: String(engine.state.connectors.length),
+	};
+	return Object.entries(fallback).map(([key, value]) => ({
+		key,
+		readonly: READONLY_CONFIGURATION_KEYS.includes(key),
+		value:
+			key === 'HeartbeatInterval'
+				? String(engine.getHeartbeatIntervalMs() / 1000)
+				: key === 'MeterValueSampleInterval'
+					? String(engine.getMeterValueIntervalMs() / 1000)
+					: (stored[key] ?? value),
+	}));
+}
+
+function applyConfiguration16(
+	engine: EngineBase<Simulator16State>,
+	key: string,
+	value: string,
+): { status: 'Accepted' | 'Rejected' | 'NotSupported' } {
+	const entries = configurationEntries16(engine, {
+		id: '',
+		vendor: '',
+		model: '',
+		firmwareVersion: '',
+	});
+	const entry = entries.find((item) => item.key === key);
+	if (entry === undefined) return { status: 'NotSupported' };
+	if (entry.readonly) return { status: 'Rejected' };
+	if (CONFIGURATION_BOOLEAN_KEYS.includes(key)) {
+		if (value !== 'true' && value !== 'false') return { status: 'Rejected' };
+	} else if (CONFIGURATION_NUMERIC_KEYS.includes(key)) {
+		if (!/^\d+$/.test(value)) return { status: 'Rejected' };
+	}
+	if (key === 'HeartbeatInterval') {
+		const seconds = Number(value);
+		if (!Number.isInteger(seconds) || seconds <= 0) return { status: 'Rejected' };
+		engine.setHeartbeatIntervalMs(seconds * 1000);
+	} else if (key === 'MeterValueSampleInterval') {
+		const seconds = Number(value);
+		if (!Number.isInteger(seconds) || seconds < 0) return { status: 'Rejected' };
+		engine.setMeterValueIntervalMs(seconds * 1000);
+		for (const connector of engine.state.connectors) {
+			if (connector.activeTransaction !== null && connector.status === 'Charging') {
+				startMeterLoop(engine, connector.id, engine.getMeterValueIntervalMs());
+			}
+		}
+	}
+	engine.state.configuration = {
+		...(engine.state.configuration ?? {}),
+		[key]: value,
+	};
+	return { status: 'Accepted' };
+}
+
+function cancelStatusFlow16(engine: EngineBase<Simulator16State>, kind: string): void {
+	const flows = statusFlows.get(engine);
+	const cancels = flows?.get(kind);
+	if (cancels === undefined) return;
+	for (const cancel of cancels) cancel();
+	cancels.length = 0;
+	flows?.delete(kind);
+}
+
+function scheduleStatus16(
+	engine: EngineBase<Simulator16State>,
+	kind: string,
+	delayMs: number,
+	callback: () => void | Promise<void>,
+): void {
+	const flows = statusFlows.get(engine) ?? new Map<string, Array<() => void>>();
+	statusFlows.set(engine, flows);
+	const cancels = flows.get(kind) ?? [];
+	flows.set(kind, cancels);
+	cancels.push(engine.scheduler.setTimeout(callback, delayMs));
+}
+
+function startDiagnostics16(engine: EngineBase<Simulator16State>, station: Station16Options): void {
+	cancelStatusFlow16(engine, 'diagnostics');
+	engine.state.diagnosticsStatus = 'Uploading';
+	void engine
+		.sendOrQueue('DiagnosticsStatusNotification', { status: 'Uploading' })
+		.catch((error: unknown) => reportStartError16(engine, error));
+	scheduleStatus16(engine, 'diagnostics', 1000, async () => {
+		engine.state.diagnosticsStatus = 'Uploaded';
+		await engine.sendOrQueue('DiagnosticsStatusNotification', { status: 'Uploaded' });
+	});
+	void station;
+}
+
+function startFirmwareUpdate16(engine: EngineBase<Simulator16State>): void {
+	cancelStatusFlow16(engine, 'firmware');
+	engine.state.firmwareStatus = 'Downloading';
+	void engine
+		.sendOrQueue('FirmwareStatusNotification', { status: 'Downloading' })
+		.catch((error: unknown) => reportStartError16(engine, error));
+	scheduleStatus16(engine, 'firmware', 1000, async () => {
+		engine.state.firmwareStatus = 'Downloaded';
+		await engine.sendOrQueue('FirmwareStatusNotification', { status: 'Downloaded' });
+	});
+	scheduleStatus16(engine, 'firmware', 2000, async () => {
+		engine.state.firmwareStatus = 'Installing';
+		await engine.sendOrQueue('FirmwareStatusNotification', { status: 'Installing' });
+	});
+	scheduleStatus16(engine, 'firmware', 3000, async () => {
+		engine.state.firmwareStatus = 'Installed';
+		await engine.sendOrQueue('FirmwareStatusNotification', { status: 'Installed' });
+	});
+}
+
+function cancelReservationTimer16(engine: EngineBase<Simulator16State>, connectorId: number): void {
+	const timers = reservationTimers.get(engine);
+	const cancel = timers?.get(connectorId);
+	cancel?.();
+	timers?.delete(connectorId);
+}
+
+function armReservationTimer16(engine: EngineBase<Simulator16State>, connector: Connector16): void {
+	cancelReservationTimer16(engine, connector.id);
+	const reservation = connector.reservation;
+	if (reservation === null) return;
+	const expiry = Date.parse(reservation.expiryDate);
+	if (!Number.isFinite(expiry)) return;
+	const remaining = expiry - Date.parse(engine.ocppNow());
+	if (remaining <= 0) {
+		void expireReservation16(engine, connector);
+		return;
+	}
+	const timers = reservationTimers.get(engine) ?? new Map<number, () => void>();
+	reservationTimers.set(engine, timers);
+	timers.set(
+		connector.id,
+		engine.scheduler.setTimeout(
+			() => {
+				if (Date.parse(engine.ocppNow()) < expiry) {
+					armReservationTimer16(engine, connector);
+					return;
+				}
+				void expireReservation16(engine, connector);
+			},
+			Math.min(remaining, MAX_TIMER_DELAY),
+		),
+	);
+}
+
+async function expireReservation16(
+	engine: EngineBase<Simulator16State>,
+	connector: Connector16,
+): Promise<void> {
+	const reservation = connector.reservation;
+	if (reservation === null) return;
+	cancelReservationTimer16(engine, connector.id);
+	connector.reservation = null;
+	if (connector.status === 'Reserved') {
+		await sendStatusNotification(engine, connector, 'Available').catch(() => undefined);
+	}
+	engine.events.emit({
+		type: 'reservation',
+		at: engine.now(),
+		phase: 'expired',
+		connectorId: connector.id,
+		reservationId: reservation.id,
+	});
+}
+
+export function rearmReservations16(engine: EngineBase<Simulator16State>): void {
+	for (const connector of engine.state.connectors) {
+		armReservationTimer16(engine, connector);
+	}
+}
+
+function cancelAllStatusFlows16(engine: EngineBase<Simulator16State>): void {
+	const flows = statusFlows.get(engine);
+	if (flows !== undefined) {
+		for (const cancels of flows.values()) {
+			for (const cancel of cancels) cancel();
+		}
+		flows.clear();
+	}
+	const timers = reservationTimers.get(engine);
+	if (timers !== undefined) {
+		for (const cancel of timers.values()) cancel();
+		timers.clear();
+	}
+}
 
 export function createSimulator16Profile(
 	station: Station16Options,
@@ -179,6 +445,8 @@ export function createSimulator16Profile(
 		register: (engine) => registerInbound(engine, station, defaultIdTag),
 		restoreState: (value) => restoreSimulator16State(value),
 		onRestored: (engine) => {
+			cancelAllStatusFlows16(engine);
+			rearmReservations16(engine);
 			if (engine.isReady) {
 				for (const connector of engine.state.connectors) {
 					if (connector.activeTransaction !== null) {
@@ -189,6 +457,7 @@ export function createSimulator16Profile(
 		},
 		onReady: async (engine) => {
 			await sendAllStatusNotifications(engine);
+			rearmReservations16(engine);
 			for (const connector of engine.state.connectors) {
 				if (connector.activeTransaction !== null && connector.status === 'Charging') {
 					startMeterLoop(engine, connector.id, engine.getMeterValueIntervalMs());
@@ -196,6 +465,7 @@ export function createSimulator16Profile(
 			}
 		},
 		onTransportClose: (engine) => {
+			cancelAllStatusFlows16(engine);
 			const loops = meterLoops.get(engine);
 			if (loops !== undefined) {
 				for (const cancel of loops.values()) cancel();
@@ -229,6 +499,9 @@ function restoreSimulator16State(value: unknown): Simulator16State {
 	const chargingProfiles = value['chargingProfiles'];
 	const compositeSchedules = value['compositeSchedules'];
 	const defaultIdTag = value['defaultIdTag'];
+	const configuration = value['configuration'];
+	const diagnosticsStatus = value['diagnosticsStatus'];
+	const firmwareStatus = value['firmwareStatus'];
 	if (!isInteger(localListVersion) || localListVersion < 0) {
 		throw new SimulatorError('invalid-snapshot', 'localListVersion is invalid');
 	}
@@ -254,16 +527,104 @@ function restoreSimulator16State(value: unknown): Simulator16State {
 	if (connectors.length === 0) {
 		throw new SimulatorError('invalid-snapshot', 'connectors must not be empty');
 	}
+	if (configuration !== undefined && !isRecord(configuration)) {
+		throw new SimulatorError('invalid-snapshot', 'configuration is invalid');
+	}
+	const restoredConfiguration: Record<string, string> = {};
+	for (const [key, entry] of Object.entries(configuration ?? {})) {
+		if (typeof entry !== 'string') {
+			throw new SimulatorError('invalid-snapshot', 'configuration is invalid');
+		}
+		restoredConfiguration[key] = entry;
+	}
+	if (diagnosticsStatus !== undefined && typeof diagnosticsStatus !== 'string') {
+		throw new SimulatorError('invalid-snapshot', 'diagnosticsStatus is invalid');
+	}
+	if (firmwareStatus !== undefined && typeof firmwareStatus !== 'string') {
+		throw new SimulatorError('invalid-snapshot', 'firmwareStatus is invalid');
+	}
 	return {
 		connectors,
 		completedTransactions,
 		localAuthorizationList,
 		localListVersion,
 		lastTransactionSeq,
-		chargingProfiles: chargingProfiles.map((profile) => ({ ...profile }) as JsonObject),
+		chargingProfiles: restoreChargingProfiles16(chargingProfiles),
 		compositeSchedules: schedules,
 		defaultIdTag,
+		...(configuration === undefined ? {} : { configuration: restoredConfiguration }),
+		...(diagnosticsStatus === undefined ? {} : { diagnosticsStatus }),
+		...(firmwareStatus === undefined ? {} : { firmwareStatus }),
 	};
+}
+
+function restoreChargingProfiles16(value: unknown): ChargingProfile16[] {
+	if (!Array.isArray(value)) {
+		throw new SimulatorError('invalid-snapshot', 'chargingProfiles is invalid');
+	}
+	return value.map((profile, index) => {
+		if (isRecord(profile) && isRecord(profile['csChargingProfiles'])) {
+			const connectorId = isInteger(profile['connectorId']) ? profile['connectorId'] : 0;
+			const migrated = parseChargingProfile16(connectorId, profile as unknown as JsonObject);
+			if (migrated === undefined) {
+				throw new SimulatorError('invalid-snapshot', `chargingProfiles[${index}] is invalid`);
+			}
+			return migrated;
+		}
+		if (
+			!isRecord(profile) ||
+			!isInteger(profile['connectorId']) ||
+			!isInteger(profile['id']) ||
+			!isInteger(profile['stackLevel']) ||
+			typeof profile['purpose'] !== 'string' ||
+			typeof profile['kind'] !== 'string' ||
+			!isRecord(profile['schedule']) ||
+			!Array.isArray(profile['periods'])
+		) {
+			throw new SimulatorError('invalid-snapshot', `chargingProfiles[${index}] is invalid`);
+		}
+		const periods = profile['periods'].map((period) => {
+			if (
+				!isRecord(period) ||
+				!isFiniteNumber(period['startPeriod']) ||
+				!isFiniteNumber(period['limit'])
+			) {
+				throw new SimulatorError('invalid-snapshot', `chargingProfiles[${index}] is invalid`);
+			}
+			return {
+				startPeriod: period['startPeriod'],
+				limit: period['limit'],
+				...(isInteger(period['numberPhases']) ? { numberPhases: period['numberPhases'] } : {}),
+			};
+		});
+		const validFrom = profile['validFrom'];
+		const validTo = profile['validTo'];
+		const transactionId = profile['transactionId'];
+		const receivedAt = profile['receivedAt'];
+		if (
+			(validFrom !== undefined &&
+				(typeof validFrom !== 'string' || !Number.isFinite(Date.parse(validFrom)))) ||
+			(validTo !== undefined &&
+				(typeof validTo !== 'string' || !Number.isFinite(Date.parse(validTo)))) ||
+			(transactionId !== undefined && !isInteger(transactionId)) ||
+			(receivedAt !== undefined && !isFiniteNumber(receivedAt))
+		) {
+			throw new SimulatorError('invalid-snapshot', `chargingProfiles[${index}] is invalid`);
+		}
+		return {
+			connectorId: profile['connectorId'],
+			id: profile['id'],
+			stackLevel: profile['stackLevel'],
+			purpose: profile['purpose'],
+			kind: profile['kind'],
+			schedule: { ...profile['schedule'] } as JsonObject,
+			periods,
+			...(validFrom === undefined ? {} : { validFrom }),
+			...(validTo === undefined ? {} : { validTo }),
+			...(transactionId === undefined ? {} : { transactionId }),
+			...(receivedAt === undefined ? {} : { receivedAt }),
+		};
+	});
 }
 
 function restoreConnectors16(value: unknown): Connector16[] {
@@ -303,6 +664,17 @@ function restoreConnectors16(value: unknown): Connector16[] {
 		if (!isFiniteNumber(updatedAt)) {
 			throw new SimulatorError('invalid-snapshot', `connectors[${index}].updatedAt is invalid`);
 		}
+		const pendingAvailability = entry['pendingAvailability'];
+		if (
+			pendingAvailability !== undefined &&
+			pendingAvailability !== 'Operative' &&
+			pendingAvailability !== 'Inoperative'
+		) {
+			throw new SimulatorError(
+				'invalid-snapshot',
+				`connectors[${index}].pendingAvailability is invalid`,
+			);
+		}
 		return {
 			id,
 			status: status as ConnectorStatus16,
@@ -311,6 +683,7 @@ function restoreConnectors16(value: unknown): Connector16[] {
 			chargingPowerKw,
 			activeTransaction: restoreActiveTransaction16(activeTransaction, index),
 			reservation: restoreReservation16(reservation, index),
+			...(pendingAvailability === undefined ? {} : { pendingAvailability }),
 			updatedAt,
 		};
 	});
@@ -478,6 +851,10 @@ export function sendStatusNotification(
 	status: ConnectorStatus16,
 	errorCode = 'NoError',
 ): Promise<void> {
+	if (status === 'Unavailable' || status === 'Faulted') {
+		cancelReservationTimer16(engine, connector.id);
+		connector.reservation = null;
+	}
 	connector.status = status;
 	connector.errorCode = errorCode;
 	connector.updatedAt = engine.now();
@@ -519,6 +896,7 @@ export async function startChargingSession(
 ): Promise<{ ok: boolean; transactionId?: number; reason?: string }> {
 	const connector = engine.state.connectors.find((item) => item.id === connectorId);
 	if (connector === undefined) return { ok: false, reason: 'invalid-connector' };
+	if (engine.state.pendingReboot === true) return { ok: false, reason: 'reboot-pending' };
 	if (connector.activeTransaction !== null) return { ok: false, reason: 'occupied' };
 	if (connector.status !== 'Available' && connector.status !== 'Reserved') {
 		return { ok: false, reason: 'not-available' };
@@ -568,6 +946,7 @@ export async function startTransaction(
 ): Promise<{ ok: boolean; transactionId?: number; reason?: string }> {
 	const connector = engine.state.connectors.find((item) => item.id === connectorId);
 	if (connector === undefined) return { ok: false, reason: 'invalid-connector' };
+	if (engine.state.pendingReboot === true) return { ok: false, reason: 'reboot-pending' };
 	if (connector.activeTransaction !== null) return { ok: false, reason: 'occupied' };
 	if (connector.status !== 'Available' && connector.status !== 'Reserved') {
 		return { ok: false, reason: 'not-available' };
@@ -637,6 +1016,7 @@ async function finalizeStartTransaction16(
 			lastMeterWh: connector.meterWh,
 		};
 		connector.reservation = null;
+		cancelReservationTimer16(engine, connector.id);
 		engine.events.emit({
 			type: 'transaction',
 			at: engine.now(),
@@ -719,47 +1099,118 @@ export async function sendMeterValues(
 	await engine.sendOrQueue('MeterValues', payload);
 }
 
-export async function stopTransaction(
+export function stopTransaction(
 	engine: EngineBase<Simulator16State>,
 	connectorId: number,
 	reason = 'Local',
 ): Promise<void> {
 	const connector = engine.state.connectors.find((item) => item.id === connectorId);
 	const tx = connector?.activeTransaction;
-	if (connector === undefined || tx === null || tx === undefined) return;
-	await sendStatusNotification(engine, connector, 'Finishing');
-	stopMeterLoop(engine, connector.id);
-	await engine.sendOrQueue('StopTransaction', {
-		transactionId: tx.transactionId,
-		meterStop: Math.round(connector.meterWh),
-		timestamp: engine.ocppNow(),
-		reason,
-		idTag: tx.idTag,
-	});
-	const stoppedAt = engine.now();
-	const meterStop = Math.round(connector.meterWh);
-	engine.state.completedTransactions.push({
-		connectorId: connector.id,
-		transactionId: tx.transactionId,
-		idTag: tx.idTag,
-		meterStart: tx.meterStart,
-		meterStop,
-		energyWh: meterStop - tx.meterStart,
-		startedAt: tx.startedAt,
-		stoppedAt,
-		reason,
-	});
-	engine.events.emit({
-		type: 'transaction',
-		at: engine.now(),
-		phase: 'stopped',
-		protocol: '1.6',
-		entityId: connector.id,
-		transactionId: tx.transactionId,
-	});
-	connector.activeTransaction = null;
-	connector.updatedAt = engine.now();
-	await sendStatusNotification(engine, connector, 'Available');
+	if (connector === undefined || tx === null || tx === undefined) return Promise.resolve();
+	const existing = stopOperations.get(tx);
+	if (existing !== undefined) return existing;
+	const previousStatus = connector.status;
+	const previousErrorCode = connector.errorCode;
+	const rollback = (): void => {
+		if (connector.activeTransaction !== tx) return;
+		connector.status = previousStatus;
+		connector.errorCode = previousErrorCode;
+		connector.updatedAt = engine.now();
+		try {
+			startMeterLoop(engine, connector.id, engine.getMeterValueIntervalMs());
+		} catch {
+			// The engine may be disposing.
+		}
+		void sendStatusNotification(engine, connector, previousStatus, previousErrorCode).catch(
+			() => undefined,
+		);
+	};
+	const operation = (async () => {
+		try {
+			await sendStatusNotification(engine, connector, 'Finishing');
+			stopMeterLoop(engine, connector.id);
+			const stopPayload: JsonObject = {
+				transactionId: tx.transactionId,
+				meterStop: Math.round(connector.meterWh),
+				timestamp: engine.ocppNow(),
+				reason,
+				idTag: tx.idTag,
+			};
+			if (engine.isReady) {
+				try {
+					await engine.sendCall('StopTransaction', stopPayload);
+				} catch (error) {
+					if (
+						error instanceof SimulatorError &&
+						(error.code === 'timeout' ||
+							error.code === 'send-failed' ||
+							error.code === 'disconnected' ||
+							error.code === 'not-connected')
+					) {
+						await engine.queueCall('StopTransaction', stopPayload);
+					} else {
+						throw error;
+					}
+				}
+			} else {
+				await engine.sendOrQueue('StopTransaction', stopPayload);
+			}
+			engine.state.chargingProfiles = engine.state.chargingProfiles.filter(
+				(profile) =>
+					!(
+						profile.connectorId === connector.id &&
+						profile.purpose === 'TxProfile' &&
+						(profile.transactionId === undefined || profile.transactionId === tx.transactionId)
+					),
+			);
+			const stoppedAt = engine.now();
+			const meterStop = Math.round(connector.meterWh);
+			engine.state.completedTransactions.push({
+				connectorId: connector.id,
+				transactionId: tx.transactionId,
+				idTag: tx.idTag,
+				meterStart: tx.meterStart,
+				meterStop,
+				energyWh: meterStop - tx.meterStart,
+				startedAt: tx.startedAt,
+				stoppedAt,
+				reason,
+			});
+			engine.events.emit({
+				type: 'transaction',
+				at: engine.now(),
+				phase: 'stopped',
+				protocol: '1.6',
+				entityId: connector.id,
+				transactionId: tx.transactionId,
+			});
+			connector.activeTransaction = null;
+			connector.updatedAt = engine.now();
+			const pending = connector.pendingAvailability;
+			delete connector.pendingAvailability;
+			await sendStatusNotification(
+				engine,
+				connector,
+				pending === 'Inoperative' ? 'Unavailable' : 'Available',
+			);
+			if (
+				engine.state.pendingReboot === true &&
+				!engine.state.connectors.some((item) => item.activeTransaction !== null)
+			) {
+				delete engine.state.pendingReboot;
+				engine.reboot();
+			}
+		} catch (error) {
+			rollback();
+			throw error;
+		}
+	})();
+	stopOperations.set(tx, operation);
+	const cleanup = (): void => {
+		if (stopOperations.get(tx) === operation) stopOperations.delete(tx);
+	};
+	void operation.then(cleanup, cleanup);
+	return operation;
 }
 
 export function startMeterLoop(
@@ -813,6 +1264,247 @@ export function stopMeterLoop(engine: EngineBase<Simulator16State>, connectorId:
 	loops?.delete(connectorId);
 }
 
+function parseChargingProfile16(
+	connectorId: number,
+	payload: JsonObject,
+): ChargingProfile16 | undefined {
+	const profile = payload['csChargingProfiles'] ?? payload['chargingProfile'];
+	if (!isRecord(profile)) return undefined;
+	const id = profile['chargingProfileId'];
+	const stackLevel = profile['stackLevel'];
+	const purpose = profile['chargingProfilePurpose'];
+	const kind = profile['chargingProfileKind'];
+	const schedule = profile['chargingSchedule'];
+	const validFrom = profile['validFrom'];
+	const validTo = profile['validTo'];
+	const transactionId = profile['transactionId'];
+	if (
+		!isInteger(id) ||
+		!isInteger(stackLevel) ||
+		stackLevel < 0 ||
+		typeof purpose !== 'string' ||
+		typeof kind !== 'string' ||
+		!isRecord(schedule) ||
+		(validFrom !== undefined &&
+			(typeof validFrom !== 'string' || !Number.isFinite(Date.parse(validFrom)))) ||
+		(validTo !== undefined &&
+			(typeof validTo !== 'string' || !Number.isFinite(Date.parse(validTo)))) ||
+		(transactionId !== undefined && !isInteger(transactionId))
+	) {
+		return undefined;
+	}
+	const unit = schedule['chargingRateUnit'];
+	if (unit !== 'W' && unit !== 'A') return undefined;
+	const duration = schedule['duration'];
+	if (
+		duration !== undefined &&
+		(!isFiniteNumber(duration) || !Number.isInteger(duration) || duration <= 0)
+	) {
+		return undefined;
+	}
+	const periodEntries = schedule['chargingSchedulePeriod'];
+	if (!Array.isArray(periodEntries) || periodEntries.length === 0) {
+		return undefined;
+	}
+	const periods: ChargingProfile16['periods'] = [];
+	for (const entry of periodEntries) {
+		if (!isRecord(entry)) return undefined;
+		const startPeriod = entry['startPeriod'];
+		const limit = entry['limit'];
+		const numberPhases = entry['numberPhases'];
+		if (
+			!isFiniteNumber(startPeriod) ||
+			startPeriod < 0 ||
+			!Number.isInteger(startPeriod) ||
+			!isFiniteNumber(limit)
+		) {
+			return undefined;
+		}
+		if (
+			numberPhases !== undefined &&
+			(!isInteger(numberPhases) || numberPhases < 1 || numberPhases > 3)
+		) {
+			return undefined;
+		}
+		periods.push({
+			startPeriod,
+			limit,
+			...(numberPhases === undefined ? {} : { numberPhases }),
+		});
+	}
+	periods.sort((left, right) => left.startPeriod - right.startPeriod);
+	return {
+		connectorId,
+		id,
+		stackLevel,
+		purpose,
+		kind,
+		schedule: { ...schedule },
+		periods,
+		...(validFrom === undefined ? {} : { validFrom }),
+		...(validTo === undefined ? {} : { validTo }),
+		...(transactionId === undefined ? {} : { transactionId }),
+	};
+}
+
+function buildCompositeSchedule16(
+	engine: EngineBase<Simulator16State>,
+	connectorId: number,
+	duration: number,
+	requestedUnit: 'W' | 'A',
+): JsonObject {
+	const connector = engine.state.connectors.find((item) => item.id === connectorId);
+	const now = Date.parse(engine.ocppNow());
+	const schedulerNow = engine.now();
+	const profiles = engine.state.chargingProfiles.filter(
+		(profile) =>
+			profile.connectorId === connectorId || (connectorId !== 0 && profile.connectorId === 0),
+	);
+	const activeTransaction = connector?.activeTransaction ?? null;
+	const startOffset = (profile: ChargingProfile16): number => {
+		const startSchedule = profile.schedule['startSchedule'];
+		if (typeof startSchedule === 'string') {
+			const parsed = Date.parse(startSchedule);
+			if (Number.isFinite(parsed)) return (parsed - now) / 1000;
+		}
+		const anchor =
+			profile.purpose === 'ChargePointMaxProfile'
+				? profile.receivedAt
+				: (activeTransaction?.startedAt ?? profile.receivedAt);
+		return anchor === undefined ? 0 : (anchor - schedulerNow) / 1000;
+	};
+	const scheduleDuration = (profile: ChargingProfile16): number => {
+		const value = Number(profile.schedule['duration'] ?? duration);
+		return Number.isFinite(value) && value > 0 ? value : duration;
+	};
+
+	const fallbackWatts = (connector?.chargingPowerKw ?? 0) * 1000 || 32_000;
+	const fallback =
+		requestedUnit === 'W'
+			? Math.round(fallbackWatts)
+			: Math.round((fallbackWatts / (230 * 3)) * 10) / 10;
+
+	const boundaries = new Set<number>([0, duration]);
+	const addBoundary = (value: number): void => {
+		for (const candidate of [Math.floor(value), Math.ceil(value)]) {
+			if (candidate > 0 && candidate < duration) boundaries.add(candidate);
+		}
+	};
+	for (const profile of profiles) {
+		const rawStart = startOffset(profile);
+		const windowEnd = rawStart + scheduleDuration(profile);
+		addBoundary(rawStart);
+		addBoundary(windowEnd);
+		if (profile.validFrom !== undefined) {
+			addBoundary((Date.parse(profile.validFrom) - now) / 1000);
+		}
+		if (profile.validTo !== undefined) {
+			addBoundary((Date.parse(profile.validTo) - now) / 1000);
+		}
+		for (const period of profile.periods) {
+			addBoundary(rawStart + period.startPeriod);
+		}
+	}
+
+	const periodAt = (
+		profile: ChargingProfile16,
+		start: number,
+	): { limitW: number; phases: number } | undefined => {
+		const rawStart = startOffset(profile);
+		if (start < rawStart || start >= rawStart + scheduleDuration(profile)) return undefined;
+		if (profile.validFrom !== undefined && now + start * 1000 < Date.parse(profile.validFrom)) {
+			return undefined;
+		}
+		if (profile.validTo !== undefined && now + start * 1000 >= Date.parse(profile.validTo)) {
+			return undefined;
+		}
+		if (profile.purpose === 'TxProfile') {
+			if (activeTransaction === null) return undefined;
+			if (
+				profile.transactionId !== undefined &&
+				profile.transactionId !== activeTransaction.transactionId
+			) {
+				return undefined;
+			}
+		}
+		const sourceUnit = profile.schedule['chargingRateUnit'] as 'W' | 'A';
+		const period = [...profile.periods]
+			.reverse()
+			.find((item) => rawStart + item.startPeriod <= start);
+		if (period === undefined) return undefined;
+		const phases = period.numberPhases ?? 3;
+		const watts = sourceUnit === 'A' ? period.limit * 230 * phases : period.limit;
+		return { limitW: watts, phases };
+	};
+
+	const pick = (purpose: string, start: number): ChargingProfile16 | undefined => {
+		const candidates = profiles.filter(
+			(profile) => profile.purpose === purpose && periodAt(profile, start) !== undefined,
+		);
+		if (candidates.length === 0) return undefined;
+		return candidates.reduce((best, profile) => {
+			if (profile.stackLevel !== best.stackLevel) {
+				return profile.stackLevel > best.stackLevel ? profile : best;
+			}
+			const bestSpecific = best.connectorId === connectorId ? 1 : 0;
+			const profileSpecific = profile.connectorId === connectorId ? 1 : 0;
+			return profileSpecific > bestSpecific ? profile : best;
+		});
+	};
+
+	const periods: Array<{ startPeriod: number; limit: number; numberPhases?: number }> = [];
+	const sortedBoundaries = [...boundaries]
+		.filter((value) => value >= 0 && value < duration)
+		.sort((a, b) => a - b);
+	for (const start of sortedBoundaries) {
+		const maxProfile = pick('ChargePointMaxProfile', start);
+		const txProfile = pick('TxProfile', start);
+		const defaultProfile = txProfile === undefined ? pick('TxDefaultProfile', start) : undefined;
+		const selected = [maxProfile, txProfile, defaultProfile].filter(
+			(profile): profile is ChargingProfile16 => profile !== undefined,
+		);
+		let limitW = Number.POSITIVE_INFINITY;
+		let phases = 3;
+		for (const profile of selected) {
+			const active = periodAt(profile, start);
+			if (active === undefined) continue;
+			if (active.limitW < limitW) {
+				limitW = active.limitW;
+				phases = active.phases;
+			}
+		}
+		const value = Number.isFinite(limitW) ? limitW : fallbackWatts;
+		const limit =
+			requestedUnit === 'W' ? Math.round(value) : Math.round((value / (230 * phases)) * 10) / 10;
+		const numberPhases = requestedUnit === 'A' ? phases : undefined;
+		const previous = periods[periods.length - 1];
+		if (
+			previous !== undefined &&
+			previous.limit === limit &&
+			previous.numberPhases === numberPhases
+		) {
+			continue;
+		}
+		periods.push({
+			startPeriod: start,
+			limit,
+			...(numberPhases === undefined ? {} : { numberPhases }),
+		});
+	}
+	if (periods.length === 0) {
+		periods.push({
+			startPeriod: 0,
+			limit: fallback,
+			...(requestedUnit === 'A' ? { numberPhases: 3 } : {}),
+		});
+	}
+	return {
+		duration,
+		chargingRateUnit: requestedUnit,
+		chargingSchedulePeriod: periods,
+	};
+}
+
 function registerInbound(
 	engine: EngineBase<Simulator16State>,
 	station: Station16Options,
@@ -831,6 +1523,10 @@ function registerInbound(
 	};
 	const replies: Record<string, (context: CallContext) => void | Promise<void>> = {
 		RemoteStartTransaction: async (context) => {
+			if (engine.state.pendingReboot === true) {
+				await context.reply({ status: 'Rejected' });
+				return;
+			}
 			const connectorId = Number(context.payload['connectorId'] ?? 1);
 			const connector = engine.state.connectors.find((item) => item.id === connectorId);
 			const idTag = stringValue(context.payload['idTag'], defaultIdTag);
@@ -862,66 +1558,152 @@ function registerInbound(
 		},
 		ChangeConfiguration: async (context) => {
 			const key = stringValue(context.payload['key'], '');
-			const value = numberValue(context.payload['value'], Number.NaN);
-			if (key === 'HeartbeatInterval' && Number.isFinite(value) && value > 0) {
-				engine.setHeartbeatIntervalMs(value * 1000);
-				await context.reply({ status: 'Accepted' });
+			const value = context.payload['value'];
+			if (typeof value !== 'string') {
+				await context.reply({ status: 'Rejected' });
 				return;
 			}
-			if (key === 'MeterValueSampleInterval' && Number.isFinite(value) && value > 0) {
-				engine.setMeterValueIntervalMs(value * 1000);
-				for (const connector of engine.state.connectors) {
-					if (connector.activeTransaction !== null && connector.status === 'Charging') {
-						startMeterLoop(engine, connector.id, engine.getMeterValueIntervalMs());
-					}
-				}
-				await context.reply({ status: 'Accepted' });
-				return;
-			}
-			await context.reply({ status: key === 'LocalAuthListEnabled' ? 'Accepted' : 'Rejected' });
+			const result = applyConfiguration16(engine, key, value);
+			await context.reply(result);
 		},
 		Reset: async (context) => {
+			const type = stringValue(context.payload['type'], '');
+			if (type !== 'Hard' && type !== 'Soft') {
+				await context.reply({ status: 'Rejected' });
+				return;
+			}
+			if (engine.state.pendingReboot === true) {
+				await context.reply({ status: 'Rejected' });
+				return;
+			}
+			engine.state.pendingReboot = true;
 			await context.reply({ status: 'Accepted' });
-			for (const connector of engine.state.connectors) {
-				if (connector.activeTransaction !== null) {
-					await stopTransaction(engine, connector.id, 'Local');
+			const reason = type === 'Soft' ? 'SoftReset' : 'HardReset';
+			try {
+				for (const connector of engine.state.connectors) {
+					if (connector.activeTransaction !== null) {
+						await stopTransaction(engine, connector.id, reason);
+					}
+				}
+			} finally {
+				if (
+					engine.state.pendingReboot === true &&
+					!engine.state.connectors.some((item) => item.activeTransaction !== null)
+				) {
+					delete engine.state.pendingReboot;
+					engine.reboot();
 				}
 			}
 		},
 		TriggerMessage: async (context) => {
-			await context.reply({ status: 'Accepted' });
 			const requested = stringValue(context.payload['requestedMessage'], '');
-			if (requested === 'Heartbeat') await engine.sendCall('Heartbeat', {});
-			if (requested === 'StatusNotification') await sendAllStatusNotifications(engine);
+			const supported = [
+				'BootNotification',
+				'DiagnosticsStatusNotification',
+				'FirmwareStatusNotification',
+				'Heartbeat',
+				'MeterValues',
+				'StatusNotification',
+			];
+			if (!supported.includes(requested)) {
+				await context.reply({ status: 'NotImplemented' });
+				return;
+			}
+			if (!engine.isReady) {
+				await context.reply({ status: 'Rejected' });
+				return;
+			}
+			const rawConnector = context.payload['connectorId'];
+			const connectorId = rawConnector === undefined ? undefined : Number(rawConnector);
+			if (connectorId !== undefined && (!Number.isInteger(connectorId) || connectorId < 0)) {
+				await context.reply({ status: 'Rejected' });
+				return;
+			}
+			const connector =
+				connectorId === undefined || connectorId === 0
+					? undefined
+					: engine.state.connectors.find((item) => item.id === connectorId);
+			if (connectorId !== undefined && connectorId > 0 && connector === undefined) {
+				await context.reply({ status: 'Rejected' });
+				return;
+			}
+			await context.reply({ status: 'Accepted' });
+			switch (requested) {
+				case 'BootNotification':
+					await engine.bootNotification({ force: true });
+					break;
+				case 'DiagnosticsStatusNotification':
+					await engine.sendOrQueue('DiagnosticsStatusNotification', {
+						status: engine.state.diagnosticsStatus ?? 'Idle',
+					});
+					break;
+				case 'FirmwareStatusNotification':
+					await engine.sendOrQueue('FirmwareStatusNotification', {
+						status: engine.state.firmwareStatus ?? 'Idle',
+					});
+					break;
+				case 'Heartbeat':
+					await engine.sendCall('Heartbeat', {});
+					break;
+				case 'MeterValues': {
+					const targets =
+						connectorId === undefined
+							? engine.state.connectors
+							: connector === undefined
+								? []
+								: [connector];
+					if (connectorId === 0) {
+						await engine.sendOrQueue('MeterValues', {
+							connectorId: 0,
+							meterValue: [
+								{
+									timestamp: engine.ocppNow(),
+									sampledValue: [
+										{
+											value: '0',
+											context: 'Trigger',
+											format: 'Raw',
+											measurand: 'Energy.Active.Import.Register',
+											unit: 'Wh',
+										},
+									],
+								},
+							],
+						});
+					}
+					for (const target of targets) {
+						await sendMeterValues(engine, target.id);
+					}
+					break;
+				}
+				case 'StatusNotification':
+					if (connectorId === 0) {
+						await engine.sendOrQueue('StatusNotification', {
+							connectorId: 0,
+							errorCode: 'NoError',
+							status: 'Available',
+							timestamp: engine.ocppNow(),
+						});
+					} else if (connector === undefined) {
+						await sendAllStatusNotifications(engine);
+					} else {
+						await sendStatusNotification(engine, connector, connector.status, connector.errorCode);
+					}
+					break;
+			}
 		},
 		GetConfiguration: async (context) => {
-			const keys = [
-				{
-					key: 'HeartbeatInterval',
-					readonly: false,
-					value: String(engine.getHeartbeatIntervalMs() / 1000),
-				},
-				{
-					key: 'MeterValueSampleInterval',
-					readonly: false,
-					value: String(engine.getMeterValueIntervalMs() / 1000),
-				},
-				{
-					key: 'NumberOfConnectors',
-					readonly: true,
-					value: String(engine.state.connectors.length),
-				},
-				{ key: 'ChargePointVendor', readonly: true, value: station.vendor },
-				{ key: 'ChargePointModel', readonly: true, value: station.model },
-				{ key: 'FirmwareVersion', readonly: true, value: station.firmwareVersion },
-			];
+			const keys = configurationEntries16(engine, station);
 			const requested = Array.isArray(context.payload['key'])
 				? (context.payload['key'] as string[])
 				: [];
 			const selected =
 				requested.length === 0 ? keys : keys.filter((item) => requested.includes(item.key));
 			const unknownKey = requested.filter((key) => !keys.some((item) => item.key === key));
-			await context.reply({ configurationKey: selected, unknownKey });
+			await context.reply({
+				configurationKey: selected as unknown as JsonObject[],
+				unknownKey,
+			});
 		},
 		ChangeAvailability: async (context) => {
 			const connectorId = Number(context.payload['connectorId'] ?? 0);
@@ -935,10 +1717,24 @@ function registerInbound(
 				connectorId === 0
 					? engine.state.connectors
 					: engine.state.connectors.filter((item) => item.id === connectorId);
+			if (targets.length === 0) {
+				await context.reply({ status: 'Rejected' });
+				return;
+			}
 			const active = targets.some((item) => item.activeTransaction !== null);
 			await context.reply({ status: active ? 'Scheduled' : 'Accepted' });
 			for (const connector of targets) {
-				if (connector.activeTransaction === null) {
+				if (connector.activeTransaction !== null) {
+					connector.pendingAvailability = type;
+				} else {
+					delete connector.pendingAvailability;
+					if (
+						status === 'Available' &&
+						connector.status === 'Reserved' &&
+						connector.reservation !== null
+					) {
+						continue;
+					}
 					await sendStatusNotification(engine, connector, status);
 				}
 			}
@@ -952,8 +1748,12 @@ function registerInbound(
 				return;
 			}
 			await context.reply({ status: 'Unlocked' });
+			cancelReservationTimer16(engine, connector.id);
+			connector.reservation = null;
 			if (connector.activeTransaction !== null) {
 				await stopTransaction(engine, connector.id, 'Remote');
+			} else if (connector.status === 'Reserved') {
+				await sendStatusNotification(engine, connector, 'Available');
 			}
 		},
 		ClearCache: async (context) => {
@@ -962,9 +1762,11 @@ function registerInbound(
 		},
 		GetDiagnostics: async (context) => {
 			await context.reply({ fileName: `diagnostics-${station.id}.txt` });
+			startDiagnostics16(engine, station);
 		},
 		UpdateFirmware: async (context) => {
 			await context.reply({});
+			startFirmwareUpdate16(engine);
 		},
 		GetLocalListVersion: async (context) => {
 			await context.reply({ listVersion: engine.state.localListVersion });
@@ -1001,15 +1803,47 @@ function registerInbound(
 			const connector = engine.state.connectors.find(
 				(item) => item.id === Number(context.payload['connectorId'] ?? 1),
 			);
-			if (connector === undefined || connector.status !== 'Available') {
+			const reservationId = Number(context.payload['reservationId'] ?? 0);
+			const idTag = stringValue(context.payload['idTag'], '');
+			const expiryDate = stringValue(context.payload['expiryDate'], '');
+			const expiry = Date.parse(expiryDate);
+			if (
+				connector === undefined ||
+				!Number.isInteger(reservationId) ||
+				reservationId <= 0 ||
+				idTag === '' ||
+				!Number.isFinite(expiry) ||
+				expiry <= Date.parse(engine.ocppNow())
+			) {
+				await context.reply({ status: 'Rejected' });
+				return;
+			}
+			if (connector.status === 'Unavailable') {
+				await context.reply({ status: 'Unavailable' });
+				return;
+			}
+			if (connector.status === 'Faulted') {
+				await context.reply({ status: 'Faulted' });
+				return;
+			}
+			const replacing = connector.reservation?.id === reservationId;
+			if (connector.status !== 'Available' && !(connector.status === 'Reserved' && replacing)) {
 				await context.reply({ status: 'Occupied' });
 				return;
 			}
-			connector.reservation = {
-				id: Number(context.payload['reservationId'] ?? 0),
-				expiryDate: stringValue(context.payload['expiryDate'], ''),
-				idTag: stringValue(context.payload['idTag'], ''),
-			};
+			const existing = engine.state.connectors.find(
+				(item) => item.id !== connector.id && item.reservation?.id === reservationId,
+			);
+			if (existing !== undefined) {
+				cancelReservationTimer16(engine, existing.id);
+				existing.reservation = null;
+				if (existing.status === 'Reserved') {
+					await sendStatusNotification(engine, existing, 'Available');
+				}
+			}
+			cancelReservationTimer16(engine, connector.id);
+			connector.reservation = { id: reservationId, expiryDate, idTag };
+			armReservationTimer16(engine, connector);
 			await context.reply({ status: 'Accepted' });
 			await sendStatusNotification(engine, connector, 'Reserved');
 		},
@@ -1022,34 +1856,123 @@ function registerInbound(
 				await context.reply({ status: 'Rejected' });
 				return;
 			}
+			cancelReservationTimer16(engine, connector.id);
 			connector.reservation = null;
 			await context.reply({ status: 'Accepted' });
-			await sendStatusNotification(engine, connector, 'Available');
+			if (connector.status === 'Reserved') {
+				await sendStatusNotification(engine, connector, 'Available');
+			}
 		},
 		DataTransfer: async (context) => {
 			await context.reply({ status: 'Accepted' });
 		},
 		SetChargingProfile: async (context) => {
-			engine.state.chargingProfiles.push(context.payload);
+			const connectorId = Number(context.payload['connectorId'] ?? 0);
+			if (
+				!Number.isInteger(connectorId) ||
+				connectorId < 0 ||
+				(connectorId > 0 && !engine.state.connectors.some((item) => item.id === connectorId))
+			) {
+				await context.reply({ status: 'Rejected' });
+				return;
+			}
+			const profile = parseChargingProfile16(connectorId, context.payload);
+			if (profile === undefined) {
+				await context.reply({ status: 'Rejected' });
+				return;
+			}
+			const raw = context.payload['csChargingProfiles'] ?? context.payload['chargingProfile'];
+			if (!isRecord(raw)) {
+				await context.reply({ status: 'Rejected' });
+				return;
+			}
+			if (
+				(profile.purpose !== 'ChargePointMaxProfile' &&
+					profile.purpose !== 'TxDefaultProfile' &&
+					profile.purpose !== 'TxProfile') ||
+				(profile.kind !== 'Absolute' && profile.kind !== 'Recurring' && profile.kind !== 'Relative')
+			) {
+				await context.reply({ status: 'Rejected' });
+				return;
+			}
+			if (profile.purpose === 'ChargePointMaxProfile' && connectorId !== 0) {
+				await context.reply({ status: 'Rejected' });
+				return;
+			}
+			if (profile.purpose === 'TxProfile') {
+				const connector = engine.state.connectors.find((item) => item.id === connectorId);
+				if (connector === undefined || connector.activeTransaction === null) {
+					await context.reply({ status: 'Rejected' });
+					return;
+				}
+				if (
+					profile.transactionId !== undefined &&
+					profile.transactionId !== connector.activeTransaction.transactionId
+				) {
+					await context.reply({ status: 'Rejected' });
+					return;
+				}
+			}
+			engine.state.chargingProfiles = engine.state.chargingProfiles.filter(
+				(item) =>
+					item.id !== profile.id &&
+					!(
+						item.connectorId === profile.connectorId &&
+						item.purpose === profile.purpose &&
+						item.stackLevel === profile.stackLevel
+					),
+			);
+			profile.receivedAt = engine.now();
+			engine.state.chargingProfiles.push(profile);
 			await context.reply({ status: 'Accepted' });
 		},
 		ClearChargingProfile: async (context) => {
-			engine.state.chargingProfiles = [];
-			await context.reply({ status: 'Accepted' });
+			const id = context.payload['id'];
+			const connectorId = context.payload['connectorId'];
+			const purpose = context.payload['chargingProfilePurpose'];
+			const stackLevel = context.payload['stackLevel'];
+			const hasFilters =
+				id !== undefined ||
+				connectorId !== undefined ||
+				purpose !== undefined ||
+				stackLevel !== undefined;
+			const before = engine.state.chargingProfiles;
+			const remaining = before.filter((profile) => {
+				if (id !== undefined) return profile.id !== id;
+				if (connectorId !== undefined && profile.connectorId !== connectorId) return true;
+				if (purpose !== undefined && profile.purpose !== purpose) return true;
+				if (stackLevel !== undefined && profile.stackLevel !== stackLevel) return true;
+				return false;
+			});
+			engine.state.chargingProfiles = remaining;
+			const removed = before.length - remaining.length;
+			await context.reply({
+				status: !hasFilters || removed > 0 ? 'Accepted' : 'Unknown',
+			});
 		},
 		GetCompositeSchedule: async (context) => {
 			const connectorId = Number(context.payload['connectorId'] ?? 0);
 			const duration = Number(context.payload['duration'] ?? 3600);
 			const unit = stringValue(context.payload['chargingRateUnit'], 'W');
+			if (
+				!Number.isInteger(connectorId) ||
+				connectorId < 0 ||
+				(connectorId > 0 && !engine.state.connectors.some((item) => item.id === connectorId)) ||
+				!Number.isFinite(duration) ||
+				!Number.isInteger(duration) ||
+				duration <= 0 ||
+				(unit !== 'W' && unit !== 'A')
+			) {
+				await context.reply({ status: 'Rejected' });
+				return;
+			}
+			const schedule = buildCompositeSchedule16(engine, connectorId, duration, unit);
+			engine.state.compositeSchedules[String(connectorId)] = schedule;
 			await context.reply({
 				status: 'Accepted',
 				connectorId,
 				scheduleStart: engine.ocppNow(),
-				chargingSchedule: {
-					duration,
-					chargingRateUnit: unit,
-					chargingSchedulePeriod: [{ startPeriod: 0, limit: 32000, numberPhases: 3 }],
-				},
+				chargingSchedule: schedule,
 			});
 		},
 	};
@@ -1068,15 +1991,6 @@ function registerInbound(
 function nextTransactionId(engine: EngineBase<Simulator16State>): number {
 	engine.state.lastTransactionSeq += 1;
 	return engine.state.lastTransactionSeq;
-}
-
-function numberValue(value: unknown, fallback: number): number {
-	if (typeof value === 'number' && Number.isFinite(value)) return value;
-	if (typeof value === 'string' && value.trim() !== '') {
-		const parsed = Number(value);
-		return Number.isFinite(parsed) ? parsed : fallback;
-	}
-	return fallback;
 }
 
 function stringValue(value: unknown, fallback: string): string {
@@ -1187,6 +2101,15 @@ export class Simulator16 extends EngineBase<Simulator16State> {
 
 	sendMeterValues(connectorId: number): Promise<void> {
 		return sendMeterValues(this, connectorId);
+	}
+
+	override setMeterValueIntervalMs(value: number): void {
+		super.setMeterValueIntervalMs(value);
+		for (const connector of this.state.connectors) {
+			if (connector.activeTransaction !== null) {
+				startMeterLoop(this, connector.id, this.getMeterValueIntervalMs());
+			}
+		}
 	}
 
 	stopTransaction(connectorId: number, reason = 'Local'): Promise<void> {
