@@ -83,9 +83,15 @@ importers:
         specifier: workspace:^
         version: link:../core
     devDependencies:
+      '@ocpptools/schemas':
+        specifier: workspace:*
+        version: link:../schemas
       '@ocpptools/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
+      '@ocpptools/validator':
+        specifier: workspace:*
+        version: link:../validator
 
   packages/tsconfig: {}
 

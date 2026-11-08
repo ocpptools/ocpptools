@@ -51,7 +51,9 @@
     "@ocpptools/core": "workspace:^"
   },
   "devDependencies": {
-    "@ocpptools/tsconfig": "workspace:*"
+    "@ocpptools/tsconfig": "workspace:*",
+    "@ocpptools/schemas": "workspace:*",
+    "@ocpptools/validator": "workspace:*"
   },
   "publishConfig": {
     "access": "public"
