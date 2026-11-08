@@ -281,6 +281,43 @@ stop transactions the scenario started. The runner emits `scenario` events for
 `runChargingScenario()` remains available on both versions as a convenience
 wrapper.
 
+## Persistence
+
+Pass a `Storage` from `@ocpptools/core` to persist profile state, the offline
+queue, and optionally history. Connection, boot, pending calls, metrics, clock
+offset, timers, and in-flight scenarios are never stored.
+
+```ts
+const simulator = new Simulator201({
+  url: 'wss://csms.example.com/CP001',
+  transport,
+  clock,
+  station,
+  persistence: {
+    storage: createWebStorage(localStorage),
+    key: 'cp001',
+    autoSave: true,
+    saveDebounceMs: 1000,
+    includeHistory: true,
+  },
+});
+
+const loaded = await simulator.load();
+if (loaded.loaded) simulator.connect();
+
+await simulator.save();
+const snapshot = simulator.exportSnapshot();
+const result = simulator.restoreSnapshot(snapshot);
+```
+
+`load()`, `save()`, and `restoreSnapshot()` never throw for expected storage or
+snapshot failures; they return `LoadResult`, `SaveResult`, or `RestoreResult`
+with an error snapshot. Invalid snapshots are rejected before state changes.
+Restoring does not connect automatically. Autosave is debounced with the
+injected scheduler and cancelled on dispose. Restored active transactions
+restart their meter loops on the next ready transition; reservations are
+rearmed by the profile.
+
 ## Lab controls
 
 `setFaults()` applies drop, malformation, and latency to every outbound frame:

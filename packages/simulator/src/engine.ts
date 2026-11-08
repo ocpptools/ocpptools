@@ -26,16 +26,39 @@ import type {
 	BootSnapshot,
 	CommonSimulatorOptions,
 	FaultConfig,
+	PersistenceOptions,
 	SimulatorConfig,
 	SimulatorStateBase,
 } from './state.js';
 import type { InboundResponseMode, ValidateMode } from './events.js';
+import {
+	cloneJson,
+	validateSnapshot,
+	type LoadResult,
+	type RestoreResult,
+	type SaveResult,
+	type SimulatorPersistedConfig,
+	type SimulatorSnapshot,
+} from './persistence.js';
 
 export interface BootResponse {
 	readonly status: string;
 	readonly intervalMs?: number;
 	readonly currentTime?: string;
 }
+
+const AUTOSAVE_EVENTS = new Set([
+	'queue',
+	'connector',
+	'evse',
+	'transaction',
+	'reservation',
+	'boot',
+	'scenario',
+	'fault',
+	'validation',
+	'log',
+]);
 
 export interface EngineProfile<S extends object> {
 	readonly version: OcppVersion;
@@ -46,6 +69,10 @@ export interface EngineProfile<S extends object> {
 	register(engine: EngineBase<S>): void;
 	onReady(engine: EngineBase<S>, reason: 'open' | 'boot-accepted'): void | Promise<void>;
 	onTransportClose(engine: EngineBase<S>): void;
+	/** Validates and rebuilds the profile state from a snapshot. */
+	restoreState?(value: unknown): S;
+	/** Rearms profile timers and derived state after a restore. */
+	onRestored?(engine: EngineBase<S>): void;
 }
 
 export type EngineState<S extends object> = SimulatorStateBase & S;
@@ -56,7 +83,10 @@ export type EngineState<S extends object> = SimulatorStateBase & S;
  */
 export class EngineBase<S extends object> {
 	readonly version: OcppVersion;
-	readonly state: S;
+	private stateValue: S;
+	get state(): S {
+		return this.stateValue;
+	}
 	readonly scheduler: Scheduler;
 	readonly events: EventEmitter;
 	readonly history: History;
@@ -83,7 +113,9 @@ export class EngineBase<S extends object> {
 	private session = 0;
 	private heartbeatCancel: (() => void) | undefined;
 	private bootRetryCancel: (() => void) | undefined;
+	private autoSaveCancel: (() => void) | undefined;
 	private bootPromise: Promise<BootResponse> | undefined;
+	private readonly persistence: PersistenceOptions | undefined;
 	private heartbeatIntervalMs: number;
 	private meterIntervalMs: number;
 
@@ -120,6 +152,7 @@ export class EngineBase<S extends object> {
 			dropRate: options.faults?.dropRate ?? 0,
 			malformRate: options.faults?.malformRate ?? 0,
 		};
+		this.persistence = options.persistence;
 		this.validationMode = options.validation?.mode ?? 'warn';
 		this.validateOutbound = options.validation?.validateOutbound;
 		this.inboundResponseMode = options.inbound?.policy ?? 'auto';
@@ -137,7 +170,7 @@ export class EngineBase<S extends object> {
 			isOpen: () => this.connection.isOpen(),
 			sendText: (text) => this.connection.sendText(text),
 		});
-		this.state = profile.createState();
+		this.stateValue = profile.createState();
 
 		this.connection = new Connection({
 			url: options.url,
@@ -181,6 +214,13 @@ export class EngineBase<S extends object> {
 			this.metrics.recordError(this.scheduler.now());
 			this.emitMetrics();
 		});
+		if (this.persistence?.autoSave === true) {
+			this.events.onAny((event) => {
+				if (AUTOSAVE_EVENTS.has(event.type)) {
+					this.scheduleAutoSave();
+				}
+			});
+		}
 	}
 
 	get isReady(): boolean {
@@ -221,6 +261,7 @@ export class EngineBase<S extends object> {
 		this.disposed = true;
 		this.ready = false;
 		this.outbound.cancelAll();
+		this.cancelAutoSave();
 		this.stopHeartbeat();
 		this.cancelBootRetry();
 		this.profile.onTransportClose(this);
@@ -558,6 +599,161 @@ export class EngineBase<S extends object> {
 		};
 	}
 
+	async load(): Promise<LoadResult> {
+		const persistence = this.persistence;
+		if (persistence === undefined) {
+			return { loaded: false };
+		}
+		if (this.disposed) {
+			return { loaded: false };
+		}
+		let raw: string | undefined;
+		try {
+			raw = await persistence.storage.get(persistence.key);
+		} catch (error) {
+			this.report(error);
+			return { loaded: false, error: errorSnapshot(error) };
+		}
+		if (raw === undefined) {
+			return { loaded: false };
+		}
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(raw) as unknown;
+		} catch {
+			const invalid = new SimulatorError('invalid-snapshot', 'The stored snapshot is not JSON');
+			this.report(invalid);
+			return { loaded: false, error: errorSnapshot(invalid) };
+		}
+		const result = this.restoreSnapshot(parsed);
+		if (!result.restored) {
+			return result.error === undefined
+				? { loaded: false }
+				: { loaded: false, error: result.error };
+		}
+		return { loaded: true, snapshot: parsed as SimulatorSnapshot };
+	}
+
+	async save(): Promise<SaveResult> {
+		const persistence = this.persistence;
+		if (persistence === undefined || this.disposed) {
+			const error = errorSnapshot(
+				new SimulatorError('persistence-failed', 'Persistence is not configured'),
+			);
+			return { saved: false, error };
+		}
+		let snapshot: SimulatorSnapshot;
+		try {
+			snapshot = this.exportSnapshot();
+		} catch (error) {
+			this.report(error);
+			return { saved: false, error: errorSnapshot(error) };
+		}
+		try {
+			await persistence.storage.set(persistence.key, JSON.stringify(snapshot));
+			this.events.emit({
+				type: 'notice',
+				at: this.scheduler.now(),
+				level: 'success',
+				message: 'Snapshot saved',
+				code: 'persistence-saved',
+			});
+			return { saved: true };
+		} catch (error) {
+			this.report(error);
+			return { saved: false, error: errorSnapshot(error) };
+		}
+	}
+
+	exportSnapshot(): SimulatorSnapshot {
+		this.assertActive();
+		const persistedConfig: SimulatorPersistedConfig = {
+			faults: { ...this.faults },
+			validationMode: this.validationMode,
+			inboundResponseMode: this.inboundResponseMode,
+			heartbeatIntervalMs: this.heartbeatIntervalMs,
+			meterValueIntervalMs: this.meterIntervalMs,
+		};
+		const snapshot: SimulatorSnapshot = {
+			snapshotVersion: 1,
+			protocol: this.version,
+			savedAt: this.scheduler.now(),
+			config: persistedConfig,
+			state: cloneJson(this.state) as unknown as JsonObject,
+			queue: this.queue.snapshot(),
+			...(this.persistence?.includeHistory === true
+				? { history: cloneJson(this.history.get()) }
+				: {}),
+		};
+		return snapshot;
+	}
+
+	restoreSnapshot(snapshot: unknown): RestoreResult {
+		if (this.disposed) {
+			return {
+				restored: false,
+				error: errorSnapshot(new SimulatorError('disposed', 'The simulator is disposed')),
+			};
+		}
+		const previousState = this.stateValue;
+		const previousFaults = { ...this.faults };
+		const previousValidationMode = this.validationMode;
+		const previousInboundResponseMode = this.inboundResponseMode;
+		const previousHeartbeatIntervalMs = this.heartbeatIntervalMs;
+		const previousMeterIntervalMs = this.meterIntervalMs;
+		const previousQueue = this.queue.snapshot();
+		const previousHistory = this.history.get();
+		const previousClockOffsetMs = this.clockOffsetMs;
+		try {
+			validateSnapshot(snapshot, this.version);
+			if (this.profile.restoreState === undefined) {
+				throw new SimulatorError('invalid-snapshot', 'This profile cannot restore state');
+			}
+			const next = this.profile.restoreState(snapshot.state);
+			this.stateValue = next;
+			this.faults = { ...snapshot.config.faults };
+			this.validationMode = snapshot.config.validationMode;
+			this.inboundResponseMode = snapshot.config.inboundResponseMode;
+			this.heartbeatIntervalMs = snapshot.config.heartbeatIntervalMs;
+			this.meterIntervalMs = snapshot.config.meterValueIntervalMs;
+			this.queue.restore(snapshot.queue);
+			for (const entry of this.queue.get()) {
+				this.rpc.trackResult(entry.messageId);
+			}
+			if (snapshot.history !== undefined) {
+				this.history.restore(snapshot.history);
+			}
+			this.clockOffsetMs = 0;
+			this.profile.onRestored?.(this);
+			this.emitQueue('restored', this.queue.size);
+			this.events.emit({
+				type: 'notice',
+				at: this.scheduler.now(),
+				level: 'success',
+				message: 'Snapshot restored',
+				code: 'persistence-restored',
+			});
+			return { restored: true };
+		} catch (error) {
+			this.stateValue = previousState;
+			this.faults = previousFaults;
+			this.validationMode = previousValidationMode;
+			this.inboundResponseMode = previousInboundResponseMode;
+			this.heartbeatIntervalMs = previousHeartbeatIntervalMs;
+			this.meterIntervalMs = previousMeterIntervalMs;
+			this.queue.restore(previousQueue);
+			this.history.restore(previousHistory);
+			this.clockOffsetMs = previousClockOffsetMs;
+			const normalized =
+				error instanceof SimulatorError
+					? error
+					: new SimulatorError('invalid-snapshot', 'The snapshot is invalid', {
+							cause: error,
+						});
+			return { restored: false, error: errorSnapshot(normalized) };
+		}
+	}
+
 	private async becomeReady(reason: 'open' | 'boot-accepted'): Promise<void> {
 		if (this.ready || !this.connection.isOpen() || this.disposed) {
 			return;
@@ -632,6 +828,27 @@ export class EngineBase<S extends object> {
 	private cancelBootRetry(): void {
 		this.bootRetryCancel?.();
 		this.bootRetryCancel = undefined;
+	}
+
+	private scheduleAutoSave(): void {
+		if (this.disposed || this.persistence?.autoSave !== true) {
+			return;
+		}
+		this.cancelAutoSave();
+		const delay = Math.max(0, this.persistence.saveDebounceMs ?? 1000);
+		try {
+			this.autoSaveCancel = this.scheduler.setTimeout(() => {
+				this.autoSaveCancel = undefined;
+				void this.save();
+			}, delay);
+		} catch {
+			this.autoSaveCancel = undefined;
+		}
+	}
+
+	private cancelAutoSave(): void {
+		this.autoSaveCancel?.();
+		this.autoSaveCancel = undefined;
 	}
 
 	private handleTransportOpen(_attemptId: number): void {

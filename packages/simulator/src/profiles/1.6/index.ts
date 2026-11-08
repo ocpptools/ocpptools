@@ -5,6 +5,7 @@ import type { JsonObject } from '@ocpptools/core';
 
 import { EngineBase, type EngineProfile } from '../../engine.js';
 import { SimulatorError, isAlreadyCountedError } from '../../errors.js';
+import { isFiniteNumber, isInteger, isRecord } from '../../persistence.js';
 import type { CallContext } from '../../rpc.js';
 import {
 	runScenario,
@@ -66,7 +67,7 @@ export interface CompletedTransaction16 {
 
 export interface LocalAuthorizationEntry {
 	idTag: string;
-	idTagInfo: { status: string; expiryDate?: string };
+	idTagInfo?: { status: string; expiryDate?: string; parentIdTag?: string };
 }
 
 export interface Simulator16State {
@@ -176,6 +177,16 @@ export function createSimulator16Profile(
 				: {}),
 		}),
 		register: (engine) => registerInbound(engine, station, defaultIdTag),
+		restoreState: (value) => restoreSimulator16State(value),
+		onRestored: (engine) => {
+			if (engine.isReady) {
+				for (const connector of engine.state.connectors) {
+					if (connector.activeTransaction !== null) {
+						startMeterLoop(engine, connector.id, engine.getMeterValueIntervalMs());
+					}
+				}
+			}
+		},
 		onReady: async (engine) => {
 			await sendAllStatusNotifications(engine);
 			for (const connector of engine.state.connectors) {
@@ -192,6 +203,273 @@ export function createSimulator16Profile(
 			}
 		},
 	};
+}
+
+const CONNECTOR_STATUSES16: readonly ConnectorStatus16[] = [
+	'Available',
+	'Preparing',
+	'Charging',
+	'SuspendedEVSE',
+	'SuspendedEV',
+	'Finishing',
+	'Reserved',
+	'Unavailable',
+	'Faulted',
+];
+
+function restoreSimulator16State(value: unknown): Simulator16State {
+	if (!isRecord(value)) {
+		throw new SimulatorError('invalid-snapshot', 'The 1.6 state must be an object');
+	}
+	const connectors = restoreConnectors16(value['connectors']);
+	const completedTransactions = restoreCompletedTransactions16(value['completedTransactions']);
+	const localAuthorizationList = restoreLocalAuthorizationList16(value['localAuthorizationList']);
+	const localListVersion = value['localListVersion'];
+	const lastTransactionSeq = value['lastTransactionSeq'];
+	const chargingProfiles = value['chargingProfiles'];
+	const compositeSchedules = value['compositeSchedules'];
+	const defaultIdTag = value['defaultIdTag'];
+	if (!isInteger(localListVersion) || localListVersion < 0) {
+		throw new SimulatorError('invalid-snapshot', 'localListVersion is invalid');
+	}
+	if (!isInteger(lastTransactionSeq) || lastTransactionSeq < 0) {
+		throw new SimulatorError('invalid-snapshot', 'lastTransactionSeq is invalid');
+	}
+	if (!Array.isArray(chargingProfiles) || !chargingProfiles.every(isRecord)) {
+		throw new SimulatorError('invalid-snapshot', 'chargingProfiles is invalid');
+	}
+	if (!isRecord(compositeSchedules)) {
+		throw new SimulatorError('invalid-snapshot', 'compositeSchedules is invalid');
+	}
+	const schedules: Record<string, JsonObject> = {};
+	for (const [key, entry] of Object.entries(compositeSchedules)) {
+		if (key === '__proto__' || key === 'constructor' || key === 'prototype' || !isRecord(entry)) {
+			throw new SimulatorError('invalid-snapshot', 'compositeSchedules is invalid');
+		}
+		schedules[key] = { ...entry } as JsonObject;
+	}
+	if (typeof defaultIdTag !== 'string' || defaultIdTag === '') {
+		throw new SimulatorError('invalid-snapshot', 'defaultIdTag is invalid');
+	}
+	if (connectors.length === 0) {
+		throw new SimulatorError('invalid-snapshot', 'connectors must not be empty');
+	}
+	return {
+		connectors,
+		completedTransactions,
+		localAuthorizationList,
+		localListVersion,
+		lastTransactionSeq,
+		chargingProfiles: chargingProfiles.map((profile) => ({ ...profile }) as JsonObject),
+		compositeSchedules: schedules,
+		defaultIdTag,
+	};
+}
+
+function restoreConnectors16(value: unknown): Connector16[] {
+	if (!Array.isArray(value)) {
+		throw new SimulatorError('invalid-snapshot', 'connectors must be an array');
+	}
+	return value.map((entry, index) => {
+		if (!isRecord(entry)) {
+			throw new SimulatorError('invalid-snapshot', `connectors[${index}] is invalid`);
+		}
+		const id = entry['id'];
+		const status = entry['status'];
+		const errorCode = entry['errorCode'];
+		const meterWh = entry['meterWh'];
+		const chargingPowerKw = entry['chargingPowerKw'];
+		const activeTransaction = entry['activeTransaction'];
+		const reservation = entry['reservation'];
+		const updatedAt = entry['updatedAt'];
+		if (!isInteger(id) || id < 1) {
+			throw new SimulatorError('invalid-snapshot', `connectors[${index}].id is invalid`);
+		}
+		if (typeof status !== 'string' || !CONNECTOR_STATUSES16.includes(status as ConnectorStatus16)) {
+			throw new SimulatorError('invalid-snapshot', `connectors[${index}].status is invalid`);
+		}
+		if (typeof errorCode !== 'string') {
+			throw new SimulatorError('invalid-snapshot', `connectors[${index}].errorCode is invalid`);
+		}
+		if (!isFiniteNumber(meterWh) || meterWh < 0) {
+			throw new SimulatorError('invalid-snapshot', `connectors[${index}].meterWh is invalid`);
+		}
+		if (!isFiniteNumber(chargingPowerKw) || chargingPowerKw < 0) {
+			throw new SimulatorError(
+				'invalid-snapshot',
+				`connectors[${index}].chargingPowerKw is invalid`,
+			);
+		}
+		if (!isFiniteNumber(updatedAt)) {
+			throw new SimulatorError('invalid-snapshot', `connectors[${index}].updatedAt is invalid`);
+		}
+		return {
+			id,
+			status: status as ConnectorStatus16,
+			errorCode,
+			meterWh,
+			chargingPowerKw,
+			activeTransaction: restoreActiveTransaction16(activeTransaction, index),
+			reservation: restoreReservation16(reservation, index),
+			updatedAt,
+		};
+	});
+}
+
+function restoreActiveTransaction16(value: unknown, index: number): ActiveTransaction16 | null {
+	if (value === null) {
+		return null;
+	}
+	if (!isRecord(value)) {
+		throw new SimulatorError(
+			'invalid-snapshot',
+			`connectors[${index}].activeTransaction is invalid`,
+		);
+	}
+	const { transactionId, idTag, meterStart, startedAt, lastMeterWh } = value;
+	if (
+		!isInteger(transactionId) ||
+		!isFiniteNumber(meterStart) ||
+		meterStart < 0 ||
+		!isFiniteNumber(startedAt) ||
+		!isFiniteNumber(lastMeterWh)
+	) {
+		throw new SimulatorError(
+			'invalid-snapshot',
+			`connectors[${index}].activeTransaction is invalid`,
+		);
+	}
+	if (typeof idTag !== 'string' || idTag === '') {
+		throw new SimulatorError(
+			'invalid-snapshot',
+			`connectors[${index}].activeTransaction is invalid`,
+		);
+	}
+	return { transactionId, idTag, meterStart, startedAt, lastMeterWh };
+}
+
+function restoreReservation16(value: unknown, index: number): Reservation16 | null {
+	if (value === null) {
+		return null;
+	}
+	if (!isRecord(value)) {
+		throw new SimulatorError('invalid-snapshot', `connectors[${index}].reservation is invalid`);
+	}
+	const { id, expiryDate, idTag } = value;
+	if (
+		!isInteger(id) ||
+		typeof expiryDate !== 'string' ||
+		typeof idTag !== 'string' ||
+		idTag === ''
+	) {
+		throw new SimulatorError('invalid-snapshot', `connectors[${index}].reservation is invalid`);
+	}
+	return { id, expiryDate, idTag };
+}
+
+function restoreCompletedTransactions16(value: unknown): CompletedTransaction16[] {
+	if (!Array.isArray(value)) {
+		throw new SimulatorError('invalid-snapshot', 'completedTransactions must be an array');
+	}
+	return value.map((entry, index) => {
+		if (!isRecord(entry)) {
+			throw new SimulatorError('invalid-snapshot', `completedTransactions[${index}] is invalid`);
+		}
+		const {
+			connectorId,
+			transactionId,
+			idTag,
+			meterStart,
+			meterStop,
+			energyWh,
+			startedAt,
+			stoppedAt,
+			reason,
+		} = entry;
+		if (
+			!isInteger(connectorId) ||
+			!isInteger(transactionId) ||
+			typeof idTag !== 'string' ||
+			!isFiniteNumber(meterStart) ||
+			!isFiniteNumber(meterStop) ||
+			!isFiniteNumber(energyWh) ||
+			!isFiniteNumber(startedAt) ||
+			!isFiniteNumber(stoppedAt) ||
+			typeof reason !== 'string'
+		) {
+			throw new SimulatorError('invalid-snapshot', `completedTransactions[${index}] is invalid`);
+		}
+		return {
+			connectorId,
+			transactionId,
+			idTag,
+			meterStart,
+			meterStop,
+			energyWh,
+			startedAt,
+			stoppedAt,
+			reason,
+		};
+	});
+}
+
+function normalizeLocalAuthorizationList16(value: unknown): LocalAuthorizationEntry[] {
+	if (!Array.isArray(value)) {
+		return [];
+	}
+	const entries: LocalAuthorizationEntry[] = [];
+	for (const entry of value) {
+		if (!isRecord(entry) || typeof entry['idTag'] !== 'string' || entry['idTag'] === '') {
+			continue;
+		}
+		const info = entry['idTagInfo'];
+		entries.push({
+			idTag: entry['idTag'],
+			...(isRecord(info) && typeof info['status'] === 'string'
+				? {
+						idTagInfo: {
+							status: info['status'],
+							...(typeof info['expiryDate'] === 'string' ? { expiryDate: info['expiryDate'] } : {}),
+							...(typeof info['parentIdTag'] === 'string'
+								? { parentIdTag: info['parentIdTag'] }
+								: {}),
+						},
+					}
+				: {}),
+		});
+	}
+	return entries;
+}
+
+function restoreLocalAuthorizationList16(value: unknown): LocalAuthorizationEntry[] {
+	if (!Array.isArray(value)) {
+		throw new SimulatorError('invalid-snapshot', 'localAuthorizationList must be an array');
+	}
+	return value.map((entry, index) => {
+		if (!isRecord(entry) || typeof entry['idTag'] !== 'string') {
+			throw new SimulatorError('invalid-snapshot', `localAuthorizationList[${index}] is invalid`);
+		}
+		const info = entry['idTagInfo'];
+		if (info !== undefined) {
+			if (!isRecord(info) || typeof info['status'] !== 'string') {
+				throw new SimulatorError('invalid-snapshot', `localAuthorizationList[${index}] is invalid`);
+			}
+		}
+		return {
+			idTag: entry['idTag'],
+			...(info === undefined
+				? {}
+				: {
+						idTagInfo: {
+							status: info['status'] as string,
+							...(typeof info['expiryDate'] === 'string' ? { expiryDate: info['expiryDate'] } : {}),
+							...(typeof info['parentIdTag'] === 'string'
+								? { parentIdTag: info['parentIdTag'] }
+								: {}),
+						},
+					}),
+		};
+	});
 }
 
 export function sendStatusNotification(
@@ -694,9 +972,7 @@ function registerInbound(
 		SendLocalList: async (context) => {
 			const updateType = stringValue(context.payload['updateType'], 'Full');
 			const version = Number(context.payload['listVersion'] ?? 0);
-			const list = Array.isArray(context.payload['localAuthorizationList'])
-				? (context.payload['localAuthorizationList'] as unknown as LocalAuthorizationEntry[])
-				: [];
+			const list = normalizeLocalAuthorizationList16(context.payload['localAuthorizationList']);
 			if (updateType === 'Full') {
 				engine.state.localAuthorizationList = list;
 				engine.state.localListVersion = version;

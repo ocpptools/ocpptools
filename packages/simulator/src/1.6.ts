@@ -4,6 +4,13 @@
 export { SIMULATOR_NAME } from './name.js';
 export { runScenario, scenarioEntityId, scenarioIdToken } from './scenario.js';
 export type {
+	LoadResult,
+	RestoreResult,
+	SaveResult,
+	SimulatorPersistedConfig,
+	SimulatorSnapshot,
+} from './persistence.js';
+export type {
 	ScenarioAdapter,
 	ScenarioEngine,
 	ScenarioOptions,

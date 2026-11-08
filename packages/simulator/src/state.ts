@@ -6,6 +6,7 @@ import type {
 	Clock,
 	MessageIdGenerator,
 	OcppVersion,
+	Storage,
 	TransportFactory,
 } from '@ocpptools/core';
 
@@ -54,6 +55,14 @@ export interface TimingOptions {
 	readonly meterValueIntervalMs?: number;
 }
 
+export interface PersistenceOptions {
+	readonly storage: Storage;
+	readonly key: string;
+	readonly autoSave?: boolean;
+	readonly saveDebounceMs?: number;
+	readonly includeHistory?: boolean;
+}
+
 export interface CommonSimulatorOptions {
 	readonly url: string;
 	readonly transport: TransportFactory;
@@ -73,6 +82,7 @@ export interface CommonSimulatorOptions {
 	};
 	readonly faults?: Partial<FaultConfig>;
 	readonly inbound?: { readonly policy?: InboundResponseMode };
+	readonly persistence?: PersistenceOptions;
 }
 
 /** A stable, serializable view of the resolved simulator configuration. */
