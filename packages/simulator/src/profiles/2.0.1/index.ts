@@ -7,6 +7,14 @@ import { EngineBase, type EngineProfile } from '../../engine.js';
 import { SimulatorError } from '../../errors.js';
 import type { CallContext } from '../../rpc.js';
 import type { CommonSimulatorOptions } from '../../state.js';
+import {
+	createDeviceModelHandlers,
+	createMonitoringState201,
+	evaluateMonitors201,
+	sendNotifyEvent201,
+	type MonitoringState201,
+	type NetworkProfile201,
+} from './device-model.js';
 
 export type EvseStatus201 = 'Available' | 'Occupied' | 'Reserved' | 'Unavailable' | 'Faulted';
 export type ChargingState201 =
@@ -75,6 +83,8 @@ export interface Simulator201State {
 	completedTransactions: CompletedTransaction201[];
 	txSeq: number;
 	pendingResets: PendingResets201;
+	monitoring: MonitoringState201;
+	networkProfiles: NetworkProfile201[];
 }
 
 export interface Station201Options {
@@ -126,6 +136,8 @@ export function createSimulator201Profile(
 			completedTransactions: [],
 			txSeq: 0,
 			pendingResets: { station: false, evseIds: [] },
+			monitoring: createMonitoringState201(),
+			networkProfiles: [],
 		}),
 		bootPayload: (reason = 'PowerUp') => ({
 			chargingStation: {
@@ -616,6 +628,11 @@ function registerInbound(engine: EngineBase<Simulator201State>): void {
 		ClearCache: { status: 'Rejected' },
 		DataTransfer: { status: 'Rejected' },
 		GetBaseReport: { status: 'Rejected' },
+		SetMonitoringBase: { status: 'Rejected' },
+		SetMonitoringLevel: { status: 'Rejected' },
+		GetMonitoringReport: { status: 'Rejected' },
+		GetReport: { status: 'Rejected' },
+		SetNetworkProfile: { status: 'Rejected' },
 	};
 	const handlers: Record<string, (context: CallContext) => void | Promise<void>> = {
 		RequestStartTransaction: async (context) => {
@@ -805,8 +822,14 @@ function registerInbound(engine: EngineBase<Simulator201State>): void {
 				await context.fail('FormatViolation', 'attributeType is not a 2.0.1 enum value');
 				return;
 			}
-			const results = items.map((item) => setVariableResult(engine, item));
+			const events: JsonObject[] = [];
+			const results = items.map((item) => setVariableResult(engine, item, events));
 			await context.reply({ setVariableResult: results });
+			for (const event of events) {
+				await sendNotifyEvent201(engine, event).catch((error: unknown) =>
+					reportProfileError(engine, error),
+				);
+			}
 		},
 		GetBaseReport: async (context) => {
 			const requestId = integerValue(context.payload['requestId']);
@@ -866,6 +889,8 @@ function registerInbound(engine: EngineBase<Simulator201State>): void {
 		},
 	};
 
+	Object.assign(handlers, createDeviceModelHandlers(engine));
+
 	for (const [action, handler] of Object.entries(handlers)) {
 		engine.onCall(action, async (context) => {
 			const rejected = rejectable[action];
@@ -909,6 +934,7 @@ function getVariableResult(
 function setVariableResult(
 	engine: EngineBase<Simulator201State>,
 	item: Record<string, unknown>,
+	events: JsonObject[],
 ): JsonObject {
 	const component = componentRef(item['component']);
 	const variable = variableRef(item['variable']);
@@ -955,6 +981,15 @@ function setVariableResult(
 	}
 	engine.state.variables[key] = value;
 	result['attributeStatus'] = 'Accepted';
+	events.push(
+		...evaluateMonitors201(
+			engine,
+			stringValue(component['name'], ''),
+			stringValue(variable['name'], ''),
+			current,
+			value,
+		),
+	);
 	if (key === 'OCPPCommCtrlr/HeartbeatInterval') {
 		engine.setHeartbeatIntervalMs(Number(value) * 1000);
 	}
@@ -980,9 +1015,10 @@ function buildReportData(engine: EngineBase<Simulator201State>, reportBase: stri
 			variableAttribute: [{ type: 'Actual', value, mutability: 'ReadWrite' }],
 		};
 		if (reportBase !== 'SummaryInventory') {
+			const boolean = value === 'true' || value === 'false';
 			entry['variableCharacteristics'] = {
-				dataType: value === 'true' || value === 'false' ? 'boolean' : 'string',
-				supportsMonitoring: false,
+				dataType: boolean ? 'boolean' : 'string',
+				supportsMonitoring: !boolean && Number.isFinite(Number(value)),
 			};
 		}
 		return entry;
@@ -1146,6 +1182,24 @@ export class Simulator201 extends EngineBase<Simulator201State> {
 
 	sendMeterValues(evseId: number): Promise<void> {
 		return sendMeterValues201(this, evseId);
+	}
+
+	sendNotifyEvent(
+		component: string,
+		variable: string,
+		actualValue: string,
+		trigger: 'Alerting' | 'Delta' | 'Periodic' = 'Alerting',
+	): Promise<void> {
+		this.state.monitoring.eventIdSeq += 1;
+		return sendNotifyEvent201(this, {
+			eventId: this.state.monitoring.eventIdSeq,
+			timestamp: this.ocppNow(),
+			trigger,
+			actualValue,
+			eventNotificationType: 'HardWiredNotification',
+			component: { name: component },
+			variable: { name: variable },
+		});
 	}
 
 	setEvseStatus(evseId: number, status: EvseStatus201): void {
