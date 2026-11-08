@@ -11,8 +11,7 @@ import { SimulatorError } from '../src/errors.js';
 import { FakeClock } from './helpers/fake-clock.js';
 import { FakeTransportFactory } from './helpers/fake-transport.js';
 
-function connectionHarness(reconnect = {}) {
-	const clock = new FakeClock();
+function connectionHarness(reconnect = {}, clock = new FakeClock()) {
 	const scheduler = new Scheduler(clock);
 	const events = new EventEmitter(() => clock.now());
 	const factory = new FakeTransportFactory();
@@ -164,6 +163,71 @@ describe('Connection', () => {
 		expect(connection.getState().retryInMs).toBeUndefined();
 		clock.advance(60_000);
 		expect(factory.transports).toHaveLength(1);
+	});
+
+	it('reschedules an active backoff when reconnect options change', () => {
+		const { connection, factory, clock } = connectionHarness();
+		connection.connect();
+		factory.transports[0]?.open();
+		factory.transports[0]?.close(1006, 'lost');
+		expect(connection.getState().retryInMs).toBe(1000);
+		connection.setReconnectOptions({ baseDelayMs: 5000, maxDelayMs: 5000 });
+		expect(connection.getState()).toMatchObject({ retryInMs: 5000 });
+		clock.advance(4999);
+		expect(factory.transports).toHaveLength(1);
+		clock.advance(1);
+		expect(factory.transports).toHaveLength(2);
+	});
+
+	it('cancels the backoff when a listener disables reconnect', () => {
+		const { connection, factory, clock, events } = connectionHarness();
+		let disabled = false;
+		events.on('connection', (event) => {
+			if (event.state === 'reconnecting' && !disabled) {
+				disabled = true;
+				connection.setReconnectOptions({ enabled: false });
+			}
+		});
+		connection.connect();
+		factory.transports[0]?.open();
+		factory.transports[0]?.close(1006, 'lost');
+		expect(connection.getState().state).toBe('disconnected');
+		expect(connection.getState().retryInMs).toBeUndefined();
+		clock.advance(60_000);
+		expect(factory.transports).toHaveLength(1);
+	});
+
+	it('stops when the lowered attempt limit is already reached', () => {
+		const { connection, factory, clock, events } = connectionHarness({ maxAttempts: 3 });
+		const errors: string[] = [];
+		events.on('error', (event) => {
+			errors.push(event.error.code);
+		});
+		connection.connect();
+		factory.transports[0]?.open();
+		factory.transports[0]?.close(1006, 'lost');
+		connection.setReconnectOptions({ maxAttempts: 1 });
+		expect(connection.getState().state).toBe('disconnected');
+		expect(errors).toContain('connection-failed');
+		clock.advance(60_000);
+		expect(factory.transports).toHaveLength(1);
+	});
+
+	it('does not stay reconnecting when the backoff timer cannot be scheduled', () => {
+		const clock = new FakeClock();
+		const original = clock.setTimeout.bind(clock);
+		let calls = 0;
+		clock.setTimeout = (callback, delayMs) => {
+			calls += 1;
+			if (calls > 1) throw new Error('timer failure');
+			return original(callback, delayMs);
+		};
+		const { connection, factory } = connectionHarness({}, clock);
+		connection.connect();
+		factory.transports[0]?.open();
+		factory.transports[0]?.close(1006, 'lost');
+		expect(connection.getState().state).toBe('disconnected');
+		expect(connection.getState().retryInMs).toBeUndefined();
 	});
 
 	it('validates options', () => {

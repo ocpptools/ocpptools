@@ -14,6 +14,7 @@ import {
 	sendNotifyChargingLimit201,
 	sendNotifyEVChargingNeeds201,
 	sendNotifyEVChargingSchedule201,
+	type ChargingProfile201,
 	type ChargingProfileState201,
 } from './charging.js';
 import {
@@ -35,14 +36,18 @@ import {
 	sendSecurityEvent201,
 	sendSignCertificate201,
 	type SecurityState201,
+	type SimulatedCertificate201,
 } from './security.js';
 import {
 	createDeviceModelHandlers,
 	createMonitoringState201,
 	evaluateMonitors201,
 	sendNotifyEvent201,
+	variableCharacteristics201,
+	type MonitoringBase201,
 	type MonitoringState201,
 	type NetworkProfile201,
+	type VariableMonitor201,
 } from './device-model.js';
 import {
 	createLocalAuthHandlers,
@@ -55,6 +60,7 @@ import {
 	restoreReservation201,
 	sendReservationStatusUpdate201,
 	takeReservation201,
+	type LocalAuthorizationEntry201,
 	type LocalAuthorizationState201,
 	type Reservation201,
 } from './local-auth.js';
@@ -151,6 +157,95 @@ export interface Station201Options {
 
 export interface Simulator201Options extends CommonSimulatorOptions {
 	readonly station: Station201Options;
+}
+
+export interface DeviceModelApi201 {
+	variables(): Record<string, string>;
+	sendReport(options: NotifyReportOptions201): Promise<void>;
+	sendMonitoringReport(options: NotifyMonitoringReportOptions201): Promise<void>;
+}
+
+export interface MonitoringApi201 {
+	list(): VariableMonitor201[];
+	setBase(base: MonitoringBase201): Promise<JsonObject>;
+	setLevel(severity: number): Promise<JsonObject>;
+	sendReport(options: NotifyMonitoringReportOptions201): Promise<void>;
+}
+
+export interface LocalAuthApi201 {
+	getVersion(): number;
+	list(): LocalAuthorizationEntry201[];
+	clearCache(): void;
+}
+
+export interface ReservationsApi201 {
+	list(): Reservation201[];
+	sendStatusUpdate(reservationId: number, status: 'Expired' | 'Removed'): Promise<void>;
+}
+
+export interface ChargingProfilesApi201 {
+	list(): ChargingProfile201[];
+	sendLimit(source: 'EMS' | 'Other' | 'SO' | 'CSO', evseId?: number): Promise<void>;
+	sendCleared(source: 'EMS' | 'Other' | 'SO' | 'CSO', evseId?: number): Promise<void>;
+}
+
+export interface DisplayApi201 {
+	list(): JsonObject[];
+	send(requestId: number, messageInfo: JsonObject[], tbc?: boolean): Promise<void>;
+}
+
+export interface CertificatesApi201 {
+	list(): SimulatedCertificate201[];
+	sign(csr: string, type?: 'ChargingStationCertificate' | 'V2GCertificate'): Promise<JsonObject>;
+	get15118(
+		schemaVersion: string,
+		action: 'Install' | 'Update',
+		exiRequest: string,
+	): Promise<JsonObject>;
+	getStatus(ocspRequestData: JsonObject): Promise<JsonObject>;
+	sendSecurityEvent(type: string, techInfo?: string): Promise<void>;
+}
+
+export interface FirmwareApi201 {
+	sendStatus(status: string, requestId?: number): Promise<void>;
+	sendPublishStatus(status: string, location?: string[], requestId?: number): Promise<void>;
+	sendLogStatus(status: string, requestId?: number): Promise<void>;
+}
+
+export interface CustomerApi201 {
+	sendCustomerInformation(
+		requestId: number,
+		data: string,
+		seqNo?: number,
+		tbc?: boolean,
+	): Promise<void>;
+	sendEVChargingNeeds(
+		evseId: number,
+		mode?: 'DC' | 'AC_single_phase' | 'AC_two_phase' | 'AC_three_phase',
+		extra?: JsonObject,
+	): Promise<void>;
+	sendEVChargingSchedule(evseId: number, schedule: JsonObject): Promise<void>;
+}
+
+export interface TransactionsApi201 {
+	startSession(
+		evseId: number,
+		idToken?: string,
+	): Promise<{ ok: boolean; transactionId?: string; reason?: string }>;
+	stop(evseId: number, reason?: string): Promise<boolean>;
+	sendEvent(
+		evseId: number,
+		eventType: 'Started' | 'Updated' | 'Ended',
+		triggerReason: string,
+	): Promise<void>;
+	meter(evseId: number): Promise<void>;
+	status(evseId: number, status?: EvseStatus201): Promise<void>;
+	get(evseId: number): Evse201 | undefined;
+}
+
+export interface AvailabilityApi201 {
+	setStatus(evseId: number, status: EvseStatus201): Promise<void>;
+	setPower(evseId: number, kw: number): void;
 }
 
 const meterLoops = new WeakMap<object, Map<number, () => void>>();
@@ -689,9 +784,82 @@ export async function startChargingSession201(
 	}
 }
 
+export interface NotifyReportOptions201 {
+	readonly requestId: number;
+	readonly reportData?: readonly JsonObject[];
+	readonly seqNo?: number;
+	readonly tbc?: boolean;
+}
+
+export interface NotifyMonitoringReportOptions201 {
+	readonly requestId: number;
+	readonly monitor?: readonly JsonObject[];
+	readonly seqNo?: number;
+	readonly tbc?: boolean;
+}
+
+export async function sendNotifyReport201(
+	engine: EngineBase<Simulator201State>,
+	options: NotifyReportOptions201,
+): Promise<void> {
+	const reportData = options.reportData ?? reportDataFromVariables(engine);
+	await engine.sendOrQueue('NotifyReport', {
+		requestId: options.requestId,
+		generatedAt: engine.ocppNow(),
+		seqNo: options.seqNo ?? 0,
+		tbc: options.tbc ?? false,
+		...(reportData.length === 0 ? {} : { reportData: [...reportData] }),
+	});
+}
+
+export async function sendNotifyMonitoringReport201(
+	engine: EngineBase<Simulator201State>,
+	options: NotifyMonitoringReportOptions201,
+): Promise<void> {
+	const monitor = options.monitor ?? monitoringDataFromState(engine);
+	await engine.sendOrQueue('NotifyMonitoringReport', {
+		requestId: options.requestId,
+		generatedAt: engine.ocppNow(),
+		seqNo: options.seqNo ?? 0,
+		tbc: options.tbc ?? false,
+		...(monitor.length === 0 ? {} : { monitor: [...monitor] }),
+	});
+}
+
+function reportDataFromVariables(engine: EngineBase<Simulator201State>): JsonObject[] {
+	return Object.entries(engine.state.variables).map(([key, value]) => {
+		const split = key.indexOf('/');
+		const component = split < 0 ? key : key.slice(0, split);
+		const variable = split < 0 ? key : key.slice(split + 1);
+		return {
+			component: { name: component },
+			variable: { name: variable },
+			variableAttribute: [{ type: 'Actual', value, mutability: 'ReadWrite' }],
+			variableCharacteristics: variableCharacteristics201(value),
+		};
+	});
+}
+
+function monitoringDataFromState(engine: EngineBase<Simulator201State>): JsonObject[] {
+	return engine.state.monitoring.monitors.map((monitor) => ({
+		component: monitor.component,
+		variable: monitor.variable,
+		variableMonitoring: [
+			{
+				id: monitor.id,
+				transaction: monitor.transaction,
+				value: monitor.value,
+				type: monitor.type,
+				severity: monitor.severity,
+			},
+		],
+	}));
+}
+
 export async function sendMeterValues201(
 	engine: EngineBase<Simulator201State>,
 	evseId: number,
+	increment = false,
 ): Promise<void> {
 	const evse = engine.state.evses.find((item) => item.id === evseId);
 	if (evse === undefined) {
@@ -699,9 +867,7 @@ export async function sendMeterValues201(
 	}
 	await engine.sendOrQueue('MeterValues', {
 		evseId: evse.id,
-		meterValue: [
-			buildMeterValue(engine, evse, engine.getMeterValueIntervalMs(), evse.transaction !== null),
-		],
+		meterValue: [buildMeterValue(engine, evse, engine.getMeterValueIntervalMs(), increment)],
 	});
 }
 
@@ -1218,11 +1384,7 @@ function buildReportData(engine: EngineBase<Simulator201State>, reportBase: stri
 			variableAttribute: [{ type: 'Actual', value, mutability: 'ReadWrite' }],
 		};
 		if (reportBase !== 'SummaryInventory') {
-			const boolean = value === 'true' || value === 'false';
-			entry['variableCharacteristics'] = {
-				dataType: boolean ? 'boolean' : 'string',
-				supportsMonitoring: !boolean && Number.isFinite(Number(value)),
-			};
+			entry['variableCharacteristics'] = variableCharacteristics201(value);
 		}
 		return entry;
 	});
@@ -1325,14 +1487,114 @@ function normalizePower(value: number): number {
 	return value;
 }
 
+function clone<T>(value: T): T {
+	return JSON.parse(JSON.stringify(value)) as T;
+}
+
 export class Simulator201 extends EngineBase<Simulator201State> {
 	override readonly version = '2.0.1' as const;
 	readonly subprotocol = 'ocpp2.0.1' as const;
+	readonly deviceModel: DeviceModelApi201;
+	readonly monitoring: MonitoringApi201;
+	readonly localAuth: LocalAuthApi201;
+	readonly reservations: ReservationsApi201;
+	readonly chargingProfiles: ChargingProfilesApi201;
+	readonly display: DisplayApi201;
+	readonly certificates: CertificatesApi201;
+	readonly firmware: FirmwareApi201;
+	readonly customer: CustomerApi201;
+	readonly transactions: TransactionsApi201;
+	readonly availability: AvailabilityApi201;
 	private readonly station: Station201Options;
 
 	constructor(options: Simulator201Options) {
 		super(createSimulator201Profile(options.station), options);
 		this.station = options.station;
+		this.deviceModel = {
+			variables: () => clone(this.state.variables),
+			sendReport: (reportOptions) => sendNotifyReport201(this, reportOptions),
+			sendMonitoringReport: (reportOptions) => sendNotifyMonitoringReport201(this, reportOptions),
+		};
+		this.monitoring = {
+			list: () => this.state.monitoring.monitors.map((monitor) => clone(monitor)),
+			setBase: (base) => {
+				if (base !== 'All' && base !== 'FactoryDefault' && base !== 'HardWiredOnly') {
+					return Promise.resolve({ status: 'NotSupported' });
+				}
+				this.state.monitoring.base = base;
+				if (base !== 'All') this.state.monitoring.monitors = [];
+				return Promise.resolve({ status: 'Accepted' });
+			},
+			setLevel: (severity) => {
+				if (!Number.isInteger(severity) || severity < 0 || severity > 9) {
+					return Promise.resolve({ status: 'Rejected' });
+				}
+				this.state.monitoring.level = severity;
+				return Promise.resolve({ status: 'Accepted' });
+			},
+			sendReport: (reportOptions) => sendNotifyMonitoringReport201(this, reportOptions),
+		};
+		this.localAuth = {
+			getVersion: () => this.state.localAuthorization.versionNumber,
+			list: () => this.state.localAuthorization.entries.map((entry) => clone(entry)),
+			clearCache: () => undefined,
+		};
+		this.reservations = {
+			list: () => this.state.reservations.map((reservation) => clone(reservation)),
+			sendStatusUpdate: (reservationId, status) =>
+				sendReservationStatusUpdate201(this, reservationId, status),
+		};
+		this.chargingProfiles = {
+			list: () => this.state.charging.profiles.map((profile) => clone(profile)),
+			sendLimit: (source, evseId) => sendNotifyChargingLimit201(this, source, evseId),
+			sendCleared: (source, evseId) => sendClearedChargingLimit201(this, source, evseId),
+		};
+		this.display = {
+			list: () => this.state.services.displays.map((item) => clone(item.message)),
+			send: (requestId, messageInfo, tbc) =>
+				sendNotifyDisplayMessages201(this, requestId, [...messageInfo], tbc),
+		};
+		this.certificates = {
+			list: () => this.state.security.certificates.map((certificate) => clone(certificate)),
+			sign: (csr, type) => sendSignCertificate201(this, csr, type),
+			get15118: (schemaVersion, action, exiRequest) =>
+				sendGet15118EVCertificate201(this, schemaVersion, action, exiRequest),
+			getStatus: (ocspRequestData) => sendGetCertificateStatus201(this, ocspRequestData),
+			sendSecurityEvent: (type, techInfo) => sendSecurityEvent201(this, type, techInfo),
+		};
+		this.firmware = {
+			sendStatus: (status, requestId) => sendFirmwareStatus201(this, status, requestId),
+			sendPublishStatus: (status, location, requestId) =>
+				sendPublishFirmwareStatus201(this, status, location, requestId),
+			sendLogStatus: (status, requestId) => sendLogStatus201(this, status, requestId),
+		};
+		this.customer = {
+			sendCustomerInformation: (requestId, data, seqNo, tbc) =>
+				sendNotifyCustomerInformation201(this, requestId, data, seqNo, tbc),
+			sendEVChargingNeeds: (evseId, mode, extra) =>
+				sendNotifyEVChargingNeeds201(this, evseId, mode, extra),
+			sendEVChargingSchedule: (evseId, schedule) =>
+				sendNotifyEVChargingSchedule201(this, evseId, schedule),
+		};
+		this.transactions = {
+			startSession: (evseId, idToken) =>
+				startChargingSession201(
+					this,
+					evseId,
+					idToken ?? this.station.defaultIdToken ?? 'AABBCCDD',
+					this.station.idTokenType ?? 'ISO14443',
+				),
+			stop: (evseId, reason) => stopTransaction201(this, evseId, reason),
+			sendEvent: (evseId, eventType, triggerReason) =>
+				this.sendTransactionEvent(evseId, eventType, triggerReason),
+			meter: (evseId) => sendMeterValues201(this, evseId),
+			status: (evseId, status) => this.sendStatusNotification(evseId, status),
+			get: (evseId) => this.getEvse(evseId),
+		};
+		this.availability = {
+			setStatus: (evseId, status) => this.sendStatusNotification(evseId, status),
+			setPower: (evseId, kw) => this.setChargingPowerKw(evseId, kw),
+		};
 	}
 
 	sendHeartbeat(): Promise<JsonObject> {
@@ -1393,6 +1655,14 @@ export class Simulator201 extends EngineBase<Simulator201State> {
 
 	sendDataTransfer(payload: JsonObject): Promise<JsonObject> {
 		return this.sendCall('DataTransfer', payload);
+	}
+
+	sendNotifyReport(options: NotifyReportOptions201): Promise<void> {
+		return sendNotifyReport201(this, options);
+	}
+
+	sendNotifyMonitoringReport(options: NotifyMonitoringReportOptions201): Promise<void> {
+		return sendNotifyMonitoringReport201(this, options);
 	}
 
 	sendNotifyEvent(

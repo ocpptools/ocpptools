@@ -1,19 +1,40 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Rodolfo Carrillo
 
-export { SIMULATOR_NAME } from './index.js';
+export { SIMULATOR_NAME } from './name.js';
+import { Simulator201 } from './profiles/2.0.1/index.js';
+import type { Simulator201Options } from './profiles/2.0.1/index.js';
 export { Simulator201 } from './profiles/2.0.1/index.js';
+export function createSimulator201(options: Simulator201Options): Simulator201 {
+	return new Simulator201(options);
+}
+export { sendNotifyMonitoringReport201, sendNotifyReport201 } from './profiles/2.0.1/index.js';
+export type {
+	NotifyMonitoringReportOptions201,
+	NotifyReportOptions201,
+} from './profiles/2.0.1/index.js';
 export type {
 	ActiveTransaction201,
+	AvailabilityApi201,
+	CertificatesApi201,
+	ChargingProfilesApi201,
 	ChargingState201,
 	CompletedTransaction201,
+	CustomerApi201,
+	DeviceModelApi201,
+	DisplayApi201,
 	Evse201,
 	EvseStatus201,
+	FirmwareApi201,
 	IdTokenKind201,
+	LocalAuthApi201,
+	MonitoringApi201,
 	PendingResets201,
+	ReservationsApi201,
 	Simulator201Options,
 	Simulator201State,
 	Station201Options,
+	TransactionsApi201,
 } from './profiles/2.0.1/index.js';
 export type {
 	MonitoringBase201,

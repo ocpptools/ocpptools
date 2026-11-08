@@ -20,16 +20,61 @@ browser.
 
 ## Entrypoints
 
-| Entrypoint                     | Contents                                                                           |
-| ------------------------------ | ---------------------------------------------------------------------------------- |
-| `@ocpptools/simulator`         | Engine primitives: RPC, connection, queue, clock, events, errors, history, metrics |
-| `@ocpptools/simulator/1.6`     | `Simulator16`, OCPP 1.6J profile and state types                                   |
-| `@ocpptools/simulator/2.0.1`   | `Simulator201`, OCPP 2.0.1 profile and state types                                 |
-| `@ocpptools/simulator/browser` | WebSocket transport factory, browser clock, Web Storage adapter                    |
+| Entrypoint                     | Contents                                                                |
+| ------------------------------ | ----------------------------------------------------------------------- |
+| `@ocpptools/simulator`         | Engine primitives and the version-agnostic `createSimulator` factory    |
+| `@ocpptools/simulator/1.6`     | `Simulator16`, `createSimulator16`, the 1.6J profile and state types    |
+| `@ocpptools/simulator/2.0.1`   | `Simulator201`, `createSimulator201`, the 2.0.1 profile and state types |
+| `@ocpptools/simulator/browser` | WebSocket transport factory, browser clock, Web Storage adapter         |
 
-The version subpaths fix the protocol version. The root entry is shared
-infrastructure. The browser entry contains no protocol profile and the engine
-entries contain no DOM code.
+The version subpaths fix the protocol version. Importing any runtime symbol
+from the root loads both profile modules because the root exports the
+`createSimulator` factory; use a version subpath to load only one protocol. The
+browser entry contains no protocol profile and the engine entries contain no
+DOM code.
+
+## Factories
+
+```ts
+import { createSimulator } from '@ocpptools/simulator';
+
+const simulator = createSimulator({
+  version: '2.0.1',
+  url: 'wss://csms.example.com/CP001',
+  transport,
+  clock,
+  station: {
+    id: 'CP001',
+    vendorName: 'Acme',
+    model: 'AC-22',
+    firmwareVersion: '2.0.0',
+  },
+});
+
+const legacy = createSimulator({
+  version: '1.6',
+  url: 'wss://csms.example.com/CP002',
+  transport,
+  clock,
+  station: {
+    id: 'CP002',
+    vendor: 'Acme',
+    model: 'AC-7',
+    firmwareVersion: '1.0.0',
+  },
+});
+```
+
+`createSimulator16(options)` and `createSimulator201(options)` are also
+available from their subpaths. The `Simulator16` and `Simulator201` classes
+remain public.
+
+Grouped sub-APIs expose the existing flows without duplicating state. OCPP
+1.6 provides `transactions`, `localAuth`, `reservations`, `chargingProfiles`,
+and `availability`. OCPP 2.0.1 adds `deviceModel`, `monitoring`, `display`,
+`certificates`, `firmware`, and `customer`. Engine aliases include
+`getPendingCalls`, `clearPendingCalls`, `getQueueLength`, `clearQueue`,
+`clearHistory`, `resetMetrics`, and `setReconnectOptions`.
 
 ## Browser quick start
 

@@ -12,7 +12,7 @@ import {
 } from '@ocpptools/core';
 
 import { Scheduler } from './clock.js';
-import { Connection } from './connection.js';
+import { Connection, type ReconnectOptions } from './connection.js';
 import { SimulatorError, errorSnapshot } from './errors.js';
 import { EventEmitter, type SimulatorEvent } from './events.js';
 import { History, type SimulatorLogEntry } from './log.js';
@@ -25,6 +25,7 @@ import type {
 	BootSnapshot,
 	CommonSimulatorOptions,
 	FaultConfig,
+	SimulatorConfig,
 	SimulatorStateBase,
 } from './state.js';
 import type { InboundResponseMode, ValidateMode } from './events.js';
@@ -182,6 +183,11 @@ export class EngineBase<S extends object> {
 		this.connection.disconnect();
 	}
 
+	setReconnectOptions(options: ReconnectOptions): void {
+		this.assertActive();
+		this.connection.setReconnectOptions(options);
+	}
+
 	dispose(): void {
 		if (this.disposed) {
 			return;
@@ -286,16 +292,47 @@ export class EngineBase<S extends object> {
 		return this.rpc.getPending();
 	}
 
+	getPendingCalls(): readonly PendingCall[] {
+		return this.rpc.getPending();
+	}
+
+	clearPendingCalls(reason = 'Pending calls cleared'): void {
+		this.assertActive();
+		this.rpc.cancelAll(reason, 'cancelled');
+	}
+
 	getQueue(): readonly QueuedCall[] {
 		return this.queue.get();
+	}
+
+	getQueueLength(): number {
+		return this.queue.size;
+	}
+
+	clearQueue(): void {
+		this.queue.clear();
+		this.emitQueue('cleared', 0);
 	}
 
 	getHistory(): readonly SimulatorLogEntry[] {
 		return this.history.get();
 	}
 
+	clearHistory(): void {
+		this.history.clear();
+	}
+
 	getMetrics(): SimulatorMetrics {
 		return this.metrics.snapshot(this.scheduler.now());
+	}
+
+	resetMetrics(): void {
+		this.metrics.reset();
+		this.events.emit({
+			type: 'metrics',
+			at: this.scheduler.now(),
+			errorCountLastMinute: 0,
+		});
 	}
 
 	getFaults(): FaultConfig {
@@ -463,7 +500,7 @@ export class EngineBase<S extends object> {
 		this.meterIntervalMs = value;
 	}
 
-	getConfig(): Record<string, unknown> {
+	getConfig(): SimulatorConfig {
 		return {
 			version: this.version,
 			url: this.options.url,

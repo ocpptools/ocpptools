@@ -18,6 +18,7 @@ import {
 
 import type { Scheduler } from './clock.js';
 import { SimulatorCallError, SimulatorError, errorSnapshot } from './errors.js';
+import type { SimulatorErrorCode } from './errors.js';
 import type { EventEmitter } from './events.js';
 import {
 	frameAction,
@@ -346,9 +347,10 @@ export class Rpc {
 			.sort((left, right) => left.createdAt - right.createdAt);
 	}
 
-	cancelAll(reason: string): void {
+	cancelAll(reason: string, code: SimulatorErrorCode = 'disconnected'): void {
 		for (const entry of [...this.pending.values()]) {
-			this.settleReject(entry, new SimulatorError('disconnected', reason), 'cancelled');
+			this.trackResult(entry.messageId);
+			this.settleReject(entry, new SimulatorError(code, reason), 'cancelled');
 		}
 	}
 

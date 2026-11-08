@@ -336,6 +336,7 @@ assert.equal(typeof schemaUtils.normalizeSchema, 'function');
 			'SimulatorCallError',
 			'SimulatorError',
 			'SimulatorValidationError',
+			'createSimulator',
 			'defaultRandom',
 			'errorSnapshot',
 		],
@@ -362,6 +363,9 @@ assert.equal(s16.SIMULATOR_PROTOCOL_VERSION, '1.6');
 assert.equal(s201.SIMULATOR_PROTOCOL_VERSION, '2.0.1');
 assert.equal(typeof s16.Simulator16, 'function');
 assert.equal(typeof s201.Simulator201, 'function');
+assert.equal(typeof s16.createSimulator16, 'function');
+assert.equal(typeof s201.createSimulator201, 'function');
+assert.equal(typeof pkg.createSimulator, 'function');
 assert.equal(typeof browser.createWebSocketTransportFactory, 'function');
 assert.equal(typeof browser.browserClock.now, 'function');
 assert.equal(typeof browser.createWebStorage, 'function');
