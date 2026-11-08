@@ -6,6 +6,14 @@ import type { JsonObject } from '@ocpptools/core';
 import { EngineBase, type EngineProfile } from '../../engine.js';
 import { SimulatorError, isAlreadyCountedError } from '../../errors.js';
 import type { CallContext } from '../../rpc.js';
+import {
+	runScenario,
+	scenarioEntityId,
+	scenarioIdToken,
+	type ScenarioOptions,
+	type ScenarioRun,
+	type ScenarioStep,
+} from '../../scenario.js';
 import type { CommonSimulatorOptions } from '../../state.js';
 import {
 	createChargingHandlers,
@@ -1787,5 +1795,53 @@ export class Simulator201 extends EngineBase<Simulator201State> {
 
 	getEvse(evseId: number): Evse201 | undefined {
 		return this.state.evses.find((item) => item.id === evseId);
+	}
+
+	runScenario(steps: readonly ScenarioStep[], options: ScenarioOptions = {}): ScenarioRun {
+		return runScenario(
+			this,
+			{
+				boot: () => this.bootNotification(),
+				heartbeat: () => this.sendHeartbeat(),
+				status: (step) =>
+					this.sendStatusNotification(
+						scenarioEntityId(step),
+						step.status as EvseStatus201 | undefined,
+					),
+				authorize: (step) =>
+					this.authorize(scenarioIdToken(step) ?? this.station.defaultIdToken ?? 'AABBCCDD'),
+				start: (step) => this.startChargingSession(scenarioEntityId(step), scenarioIdToken(step)),
+				meter: (step) => sendMeterValues201(this, scenarioEntityId(step)),
+				stop: (step) => this.stopTransaction(scenarioEntityId(step), step.reason),
+				call: (action, payload) => this.sendCall(action, payload),
+			},
+			steps,
+			options,
+		);
+	}
+
+	runChargingScenario(options: {
+		evseId?: number;
+		idToken?: string;
+		durationMs?: number;
+		readings?: number;
+	}): { cancel: () => void; done: Promise<boolean> } {
+		const evseId = options.evseId ?? 1;
+		const readings = Math.max(0, options.readings ?? 1);
+		const duration = Math.max(1000, options.durationMs ?? 5000);
+		const waitMs = Math.floor(duration / (readings + 1));
+		const steps: ScenarioStep[] = [
+			{ type: 'start', entityId: evseId, idToken: options.idToken },
+			...Array.from({ length: readings }, (): ScenarioStep[] => [
+				{ type: 'wait', ms: waitMs },
+				{ type: 'meter', entityId: evseId },
+			]).flat(),
+			{ type: 'stop', entityId: evseId, reason: 'Local' },
+		];
+		const run = this.runScenario(steps);
+		return {
+			cancel: () => run.cancel(),
+			done: run.done.then((result) => result.status === 'completed'),
+		};
 	}
 }

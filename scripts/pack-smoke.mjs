@@ -339,6 +339,9 @@ assert.equal(typeof schemaUtils.normalizeSchema, 'function');
 			'createSimulator',
 			'defaultRandom',
 			'errorSnapshot',
+			'runScenario',
+			'scenarioEntityId',
+			'scenarioIdToken',
 		],
 		requiredFiles: [
 			'package.json',
