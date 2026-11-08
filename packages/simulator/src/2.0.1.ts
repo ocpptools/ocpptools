@@ -10,10 +10,18 @@ export type {
 	Evse201,
 	EvseStatus201,
 	IdTokenKind201,
+	PendingResets201,
 	Simulator201Options,
 	Simulator201State,
 	Station201Options,
 } from './profiles/2.0.1/index.js';
+export type {
+	MonitoringBase201,
+	MonitoringState201,
+	MonitorType201,
+	NetworkProfile201,
+	VariableMonitor201,
+} from './profiles/2.0.1/device-model.js';
 
 /** The OCPP version of this entrypoint. */
 export const SIMULATOR_PROTOCOL_VERSION = '2.0.1' as const;
