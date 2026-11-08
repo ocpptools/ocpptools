@@ -15,6 +15,20 @@ import {
 	type MonitoringState201,
 	type NetworkProfile201,
 } from './device-model.js';
+import {
+	createLocalAuthHandlers,
+	createLocalAuthorizationState201,
+	cancelEvseReservations201,
+	localAuthorizationDecision201,
+	localGroupToken201,
+	rearmReservations201,
+	reservationAllows201,
+	restoreReservation201,
+	sendReservationStatusUpdate201,
+	takeReservation201,
+	type LocalAuthorizationState201,
+	type Reservation201,
+} from './local-auth.js';
 
 export type EvseStatus201 = 'Available' | 'Occupied' | 'Reserved' | 'Unavailable' | 'Faulted';
 export type ChargingState201 =
@@ -38,6 +52,7 @@ export interface ActiveTransaction201 {
 	seqNo: number;
 	meterStartWh: number;
 	remoteStartId?: number;
+	reservationId?: number;
 	/** True while an Ended event is being delivered; blocks a second stop. */
 	stopping: boolean;
 }
@@ -57,6 +72,8 @@ export interface Evse201 {
 	transaction: ActiveTransaction201 | null;
 	/** Availability change that waits for the active transaction to end. */
 	pendingOperational: 'Operative' | 'Inoperative' | null;
+	/** True while a start is awaiting authorization or delivery. */
+	starting: boolean;
 	updatedAt: number;
 }
 
@@ -85,6 +102,8 @@ export interface Simulator201State {
 	pendingResets: PendingResets201;
 	monitoring: MonitoringState201;
 	networkProfiles: NetworkProfile201[];
+	localAuthorization: LocalAuthorizationState201;
+	reservations: Reservation201[];
 }
 
 export interface Station201Options {
@@ -125,6 +144,7 @@ export function createSimulator201Profile(
 				defaultChargingPowerKw: defaultPower,
 				transaction: null,
 				pendingOperational: null,
+				starting: false,
 				updatedAt: 0,
 			})),
 			variables: {
@@ -138,6 +158,8 @@ export function createSimulator201Profile(
 			pendingResets: { station: false, evseIds: [] },
 			monitoring: createMonitoringState201(),
 			networkProfiles: [],
+			localAuthorization: createLocalAuthorizationState201(),
+			reservations: [],
 		}),
 		bootPayload: (reason = 'PowerUp') => ({
 			chargingStation: {
@@ -161,6 +183,7 @@ export function createSimulator201Profile(
 		},
 		onReady: async (engine) => {
 			await sendAllStatusNotifications(engine);
+			rearmReservations201(engine);
 			for (const evse of engine.state.evses) {
 				if (evse.transaction !== null) {
 					startMeterLoop(engine, evse.id, engine.getMeterValueIntervalMs());
@@ -182,6 +205,11 @@ export async function sendStatusNotification(
 	evse: Evse201,
 	status: EvseStatus201 = evse.status,
 ): Promise<void> {
+	if (status === 'Unavailable' || status === 'Faulted') {
+		await cancelEvseReservations201(engine, evse.id).catch((error: unknown) =>
+			reportProfileError(engine, error),
+		);
+	}
 	evse.status = status;
 	evse.updatedAt = engine.now();
 	engine.events.emit({
@@ -219,8 +247,15 @@ export async function applyOperationalState(
 	if (evse.operational === operational) return;
 	evse.operational = operational;
 	if (operational === 'Inoperative') {
+		const canceledReservations = await cancelEvseReservations201(engine, evse.id).catch(
+			(error: unknown) => {
+				reportProfileError(engine, error);
+				return false;
+			},
+		);
 		if (evse.status === 'Faulted') return;
-		evse.statusBeforeInoperative = evse.status;
+		evse.statusBeforeInoperative =
+			evse.status === 'Reserved' && canceledReservations ? 'Available' : evse.status;
 		await sendStatusNotification(engine, evse, 'Unavailable');
 		return;
 	}
@@ -300,16 +335,45 @@ function reportProfileError(engine: EngineBase<Simulator201State>, error: unknow
 	});
 }
 
-export async function authorize201(
+export interface AuthorizeResult201 {
+	readonly accepted: boolean;
+	readonly groupIdToken?: string;
+}
+
+export async function authorizeWithGroup201(
 	engine: EngineBase<Simulator201State>,
 	idToken: string,
 	idTokenType: IdTokenKind201 = 'ISO14443',
-): Promise<boolean> {
+	evseId?: number,
+): Promise<AuthorizeResult201> {
+	const local = localAuthorizationDecision201(engine, idToken, evseId);
+	if (local === 'accepted') {
+		const groupIdToken = localGroupToken201(engine, idToken);
+		return {
+			accepted: true,
+			...(groupIdToken === undefined ? {} : { groupIdToken }),
+		};
+	}
+	if (local === 'rejected') return { accepted: false };
 	const response = await engine.sendCall('Authorize', {
 		idToken: { idToken, type: idTokenType },
 	});
 	const info = objectValue(response['idTokenInfo']);
-	return info?.['status'] === 'Accepted';
+	const group = objectValue(info?.['groupIdToken']);
+	const groupIdToken = stringValue(group?.['idToken'], '');
+	return {
+		accepted: info?.['status'] === 'Accepted',
+		...(groupIdToken === '' ? {} : { groupIdToken }),
+	};
+}
+
+export async function authorize201(
+	engine: EngineBase<Simulator201State>,
+	idToken: string,
+	idTokenType: IdTokenKind201 = 'ISO14443',
+	evseId?: number,
+): Promise<boolean> {
+	return (await authorizeWithGroup201(engine, idToken, idTokenType, evseId)).accepted;
 }
 
 export function createTransaction201(
@@ -319,6 +383,7 @@ export function createTransaction201(
 		idToken: string;
 		idTokenType?: IdTokenKind201;
 		remoteStartId?: number;
+		reservationId?: number;
 	},
 ): ActiveTransaction201 {
 	engine.state.txSeq += 1;
@@ -331,6 +396,7 @@ export function createTransaction201(
 		seqNo: 0,
 		meterStartWh: evse.meterWh,
 		...(options.remoteStartId === undefined ? {} : { remoteStartId: options.remoteStartId }),
+		...(options.reservationId === undefined ? {} : { reservationId: options.reservationId }),
 		stopping: false,
 	};
 }
@@ -393,6 +459,7 @@ export async function startTransaction201(
 		idToken: string;
 		idTokenType?: IdTokenKind201;
 		remoteStartId?: number;
+		reservationId?: number;
 		triggerReason?: string;
 	},
 ): Promise<ActiveTransaction201> {
@@ -436,6 +503,9 @@ export async function sendTransactionEvent(
 	if (options.includeIdToken === true) {
 		payload['idToken'] = { idToken: transaction.idToken, type: transaction.idTokenType };
 	}
+	if (transaction.reservationId !== undefined && eventType === 'Started') {
+		payload['reservationId'] = transaction.reservationId;
+	}
 	if (options.includeMeter === true) {
 		payload['meterValue'] = [
 			buildMeterValue(
@@ -450,6 +520,9 @@ export async function sendTransactionEvent(
 	// Advance only after the event is sent or queued, so a failed send can be
 	// retried with the same sequence number.
 	transaction.seqNo += 1;
+	if (eventType === 'Started') {
+		transaction.reservationId = undefined;
+	}
 }
 
 export async function stopTransaction201(
@@ -537,15 +610,43 @@ export async function startChargingSession201(
 ): Promise<{ ok: boolean; transactionId?: string; reason?: string }> {
 	const evse = engine.state.evses.find((item) => item.id === evseId);
 	if (evse === undefined) return { ok: false, reason: 'invalid-evse' };
-	if (evse.transaction !== null) return { ok: false, reason: 'occupied' };
+	if (evse.transaction !== null || evse.starting) return { ok: false, reason: 'occupied' };
 	if (evse.status !== 'Available' && evse.status !== 'Reserved') {
 		return { ok: false, reason: 'not-available' };
 	}
-	if (!(await authorize201(engine, idToken, idTokenType))) {
-		return { ok: false, reason: 'authorize-rejected' };
+	evse.starting = true;
+	let reservation: Reservation201 | undefined;
+	let transaction: ActiveTransaction201 | undefined;
+	try {
+		const authorization = await authorizeWithGroup201(engine, idToken, idTokenType, evse.id);
+		if (!authorization.accepted) {
+			return { ok: false, reason: 'authorize-rejected' };
+		}
+		const groupIdToken = authorization.groupIdToken ?? localGroupToken201(engine, idToken);
+		if (!reservationAllows201(engine, evse.id, idToken, groupIdToken)) {
+			return { ok: false, reason: 'reserved' };
+		}
+		reservation = takeReservation201(engine, evse.id, idToken, groupIdToken);
+		if (evse.operational !== 'Operative' || !startableStatus(evse)) {
+			if (reservation !== undefined) await restoreReservation201(engine, reservation);
+			return { ok: false, reason: 'not-available' };
+		}
+		transaction = createTransaction201(engine, evse, {
+			idToken,
+			idTokenType,
+			...(reservation === undefined ? {} : { reservationId: reservation.id }),
+		});
+		await beginTransaction201(engine, evse, transaction, 'Authorized');
+		return { ok: true, transactionId: transaction.transactionId };
+	} catch (error) {
+		if (reservation !== undefined && (transaction === undefined || transaction.seqNo === 0)) {
+			await restoreReservation201(engine, reservation);
+		}
+		throw error;
+	} finally {
+		evse.starting = false;
+		await applyPendingOperational(engine);
 	}
-	const transaction = await startTransaction201(engine, evse, { idToken, idTokenType });
-	return { ok: true, transactionId: transaction.transactionId };
 }
 
 export async function sendMeterValues201(
@@ -633,6 +734,9 @@ function registerInbound(engine: EngineBase<Simulator201State>): void {
 		GetMonitoringReport: { status: 'Rejected' },
 		GetReport: { status: 'Rejected' },
 		SetNetworkProfile: { status: 'Rejected' },
+		SendLocalList: { status: 'Rejected' },
+		ReserveNow: { status: 'Rejected' },
+		CancelReservation: { status: 'Rejected' },
 	};
 	const handlers: Record<string, (context: CallContext) => void | Promise<void>> = {
 		RequestStartTransaction: async (context) => {
@@ -641,6 +745,14 @@ function registerInbound(engine: EngineBase<Simulator201State>): void {
 			const token = objectValue(context.payload['idToken']);
 			const idToken = token === undefined ? undefined : stringValue(token['idToken'], '');
 			const type = token === undefined ? 'ISO14443' : idTokenKind(token['type']);
+			const rawGroupIdToken = context.payload['groupIdToken'];
+			const groupToken = rawGroupIdToken === undefined ? undefined : objectValue(rawGroupIdToken);
+			const groupIdToken =
+				groupToken === undefined ? undefined : stringValue(groupToken['idToken'], '');
+			if (rawGroupIdToken !== undefined && (groupToken === undefined || groupIdToken === '')) {
+				await context.reply({ status: 'Rejected' });
+				return;
+			}
 			const evse = engine.state.evses.find((item) => item.id === evseId);
 			if (
 				evse === undefined ||
@@ -648,18 +760,49 @@ function registerInbound(engine: EngineBase<Simulator201State>): void {
 				idToken === undefined ||
 				idToken === '' ||
 				evse.transaction !== null ||
+				evse.starting ||
 				(evse.status !== 'Available' && evse.status !== 'Reserved')
 			) {
 				await context.reply({ status: 'Rejected' });
 				return;
 			}
-			const transaction = createTransaction201(engine, evse, {
-				idToken,
-				idTokenType: type,
-				remoteStartId,
-			});
-			await context.reply({ status: 'Accepted', transactionId: transaction.transactionId });
-			await beginTransaction201(engine, evse, transaction, 'RemoteStart');
+			evse.starting = true;
+			let reservation: Reservation201 | undefined;
+			try {
+				const effectiveGroupIdToken = groupIdToken ?? localGroupToken201(engine, idToken);
+				if (!reservationAllows201(engine, evse.id, idToken, effectiveGroupIdToken)) {
+					await context.reply({ status: 'Rejected' });
+					return;
+				}
+				reservation = takeReservation201(engine, evse.id, idToken, effectiveGroupIdToken);
+				if (evse.operational !== 'Operative' || !startableStatus(evse)) {
+					if (reservation !== undefined) await restoreReservation201(engine, reservation);
+					await context.reply({ status: 'Rejected' });
+					return;
+				}
+				const transaction = createTransaction201(engine, evse, {
+					idToken,
+					idTokenType: type,
+					remoteStartId,
+					...(reservation === undefined ? {} : { reservationId: reservation.id }),
+				});
+				await context.reply({ status: 'Accepted', transactionId: transaction.transactionId });
+				if (evse.operational !== 'Operative' || !startableStatus(evse)) {
+					if (reservation !== undefined) await restoreReservation201(engine, reservation);
+					return;
+				}
+				try {
+					await beginTransaction201(engine, evse, transaction, 'RemoteStart');
+				} catch (error) {
+					if (reservation !== undefined && transaction.seqNo === 0) {
+						await restoreReservation201(engine, reservation);
+					}
+					throw error;
+				}
+			} finally {
+				evse.starting = false;
+				await applyPendingOperational(engine);
+			}
 		},
 		RequestStopTransaction: async (context) => {
 			const transactionId = stringValue(context.payload['transactionId'], '');
@@ -772,7 +915,7 @@ function registerInbound(engine: EngineBase<Simulator201State>): void {
 				await context.reply({ status: 'Accepted' });
 				return;
 			}
-			const active = targets.some((item) => item.transaction !== null);
+			const active = targets.some((item) => item.transaction !== null || item.starting);
 			await context.reply({
 				status: active ? 'Scheduled' : 'Accepted',
 			});
@@ -890,6 +1033,7 @@ function registerInbound(engine: EngineBase<Simulator201State>): void {
 	};
 
 	Object.assign(handlers, createDeviceModelHandlers(engine));
+	Object.assign(handlers, createLocalAuthHandlers(engine));
 
 	for (const [action, handler] of Object.entries(handlers)) {
 		engine.onCall(action, async (context) => {
@@ -1108,6 +1252,10 @@ function stringValue(value: unknown, fallback: string): string {
 	return typeof value === 'string' ? value : fallback;
 }
 
+function startableStatus(evse: Evse201): boolean {
+	return evse.status === 'Available' || evse.status === 'Reserved';
+}
+
 function clampEvses(value: number): number {
 	if (!Number.isFinite(value)) return 1;
 	return Math.max(1, Math.min(8, Math.floor(value)));
@@ -1202,11 +1350,20 @@ export class Simulator201 extends EngineBase<Simulator201State> {
 		});
 	}
 
+	sendReservationStatusUpdate(reservationId: number, status: 'Expired' | 'Removed'): Promise<void> {
+		return sendReservationStatusUpdate201(this, reservationId, status);
+	}
+
 	setEvseStatus(evseId: number, status: EvseStatus201): void {
 		const evse = this.state.evses.find((item) => item.id === evseId);
 		if (evse !== undefined) {
 			evse.status = status;
 			evse.updatedAt = this.now();
+			if (status === 'Unavailable' || status === 'Faulted') {
+				void cancelEvseReservations201(this, evseId).catch((error: unknown) =>
+					reportProfileError(this, error),
+				);
+			}
 		}
 	}
 

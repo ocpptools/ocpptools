@@ -11,6 +11,7 @@ export interface ResponderOptions {
 	readonly bootStatus?: string | ((count: number) => string);
 	readonly bootIntervalSeconds?: number;
 	readonly authorizeStatus?: string | ((count: number) => string);
+	readonly authorizeGroup?: string;
 	readonly failTransactionEvent?: boolean;
 }
 
@@ -59,7 +60,19 @@ export function installResponder(transport: FakeTransport, options: ResponderOpt
 				currentTime: '2026-01-01T00:00:00Z',
 				interval: options.bootIntervalSeconds ?? 60,
 			},
-			Authorize: { idTokenInfo: { status: authorizeStatus } },
+			Authorize: {
+				idTokenInfo: {
+					status: authorizeStatus,
+					...(options.authorizeGroup === undefined
+						? {}
+						: {
+								groupIdToken: {
+									idToken: options.authorizeGroup,
+									type: 'Central',
+								},
+							}),
+				},
+			},
 			StatusNotification: {},
 			TransactionEvent: {},
 			Heartbeat: { currentTime: '2026-01-01T00:00:00Z' },

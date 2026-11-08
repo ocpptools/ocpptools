@@ -22,6 +22,11 @@ export type {
 	NetworkProfile201,
 	VariableMonitor201,
 } from './profiles/2.0.1/device-model.js';
+export type {
+	LocalAuthorizationEntry201,
+	LocalAuthorizationState201,
+	Reservation201,
+} from './profiles/2.0.1/local-auth.js';
 
 /** The OCPP version of this entrypoint. */
 export const SIMULATOR_PROTOCOL_VERSION = '2.0.1' as const;
