@@ -3,7 +3,7 @@
 
 import {
 	createMessageIdGenerator,
-	parseFrame,
+	type CallFrame,
 	type JsonObject,
 	type MessageId,
 	type OcppSubprotocol,
@@ -13,10 +13,11 @@ import {
 
 import { Scheduler } from './clock.js';
 import { Connection, type ReconnectOptions } from './connection.js';
-import { SimulatorError, errorSnapshot } from './errors.js';
+import { SimulatorError, SimulatorValidationError, errorSnapshot } from './errors.js';
 import { EventEmitter, type SimulatorEvent } from './events.js';
 import { History, type SimulatorLogEntry } from './log.js';
 import { Metrics, type SimulatorMetrics } from './metrics.js';
+import { OutboundPipeline } from './outbound.js';
 import { OfflineQueue, type QueuedCall } from './queue.js';
 import { Rpc, type CallHandler, type PendingCall } from './rpc.js';
 import { defaultRandom, type RandomSource } from './random.js';
@@ -65,8 +66,12 @@ export class EngineBase<S extends object> {
 	private readonly options: CommonSimulatorOptions;
 	private readonly connection: Connection;
 	private readonly queue: OfflineQueue;
+	private readonly outbound: OutboundPipeline;
 	private readonly messageIds: () => MessageId;
 	private readonly random: RandomSource;
+	private readonly validateOutbound:
+		| ((frame: CallFrame) => readonly string[] | null | Promise<readonly string[] | null>)
+		| undefined;
 	private readonly bootOptions: Required<BootOptions>;
 	private boot: BootSnapshot = { status: 'not-booted' };
 	private faults: FaultConfig;
@@ -116,10 +121,21 @@ export class EngineBase<S extends object> {
 			malformRate: options.faults?.malformRate ?? 0,
 		};
 		this.validationMode = options.validation?.mode ?? 'warn';
+		this.validateOutbound = options.validation?.validateOutbound;
 		this.inboundResponseMode = options.inbound?.policy ?? 'auto';
 		this.queue = new OfflineQueue({
 			maxEntries: options.queue?.maxEntries ?? 500,
 			now: () => this.scheduler.now(),
+		});
+		this.outbound = new OutboundPipeline({
+			scheduler: this.scheduler,
+			events: this.events,
+			history: this.history,
+			random: this.random,
+			getFaults: () => this.faults,
+			getEpoch: () => this.session,
+			isOpen: () => this.connection.isOpen(),
+			sendText: (text) => this.connection.sendText(text),
 		});
 		this.state = profile.createState();
 
@@ -134,7 +150,6 @@ export class EngineBase<S extends object> {
 			onTransportOpen: (attemptId) => this.handleTransportOpen(attemptId),
 			onTransportClose: (event) => this.handleTransportClose(event),
 			onMessage: (text) => this.rpc.handleText(text),
-			onTransportError: (error) => this.report(error),
 		});
 		this.rpc = new Rpc({
 			version: profile.version,
@@ -145,15 +160,26 @@ export class EngineBase<S extends object> {
 			sendText: (text) => Promise.resolve(this.connection.sendText(text)),
 			isOpen: () => this.connection.isOpen(),
 			timeoutMs: options.timing?.pendingCallTimeoutMs ?? 15_000,
+			outbound: (input) => this.outbound.deliver(input),
+			validate: (frame) => this.validateFrame(frame),
 		});
 		profile.register(this);
 		this.events.on('pending', (event) => {
 			if (event.phase === 'resolved' && event.rttMs !== undefined) {
 				this.metrics.recordRtt(event.action, event.rttMs);
+				this.emitMetrics();
 			}
 			if (event.phase === 'rejected' || event.phase === 'timeout') {
 				this.metrics.recordError(this.scheduler.now());
+				this.emitMetrics();
 			}
+		});
+		this.events.on('error', (event) => {
+			if (event.countsAsError === false) {
+				return;
+			}
+			this.metrics.recordError(this.scheduler.now());
+			this.emitMetrics();
 		});
 	}
 
@@ -194,6 +220,7 @@ export class EngineBase<S extends object> {
 		}
 		this.disposed = true;
 		this.ready = false;
+		this.outbound.cancelAll();
 		this.stopHeartbeat();
 		this.cancelBootRetry();
 		this.profile.onTransportClose(this);
@@ -243,19 +270,42 @@ export class EngineBase<S extends object> {
 
 	async sendOrQueue(action: string, payload: JsonObject): Promise<'sent' | 'queued'> {
 		this.assertActive();
-		if (this.isReady) {
-			const messageId = this.messageIds();
+		const messageId = this.rpc.reserveMessageId();
+		try {
+			const frame: CallFrame = [2, messageId, action, payload];
+			if (this.needsValidation()) {
+				await this.validateFrame(frame);
+				this.assertActive();
+			}
+			if (this.isReady) {
+				this.rpc.trackResult(messageId);
+				this.rpc.releaseMessageId(messageId);
+				try {
+					await this.rpc.sendRawFrame(frame);
+					return 'sent';
+				} catch (error) {
+					if (!(
+						error instanceof SimulatorError &&
+						(error.code === 'disconnected' || error.code === 'not-connected')
+					)) {
+						this.report(error);
+						throw error;
+					}
+				}
+			}
 			this.rpc.trackResult(messageId);
-			await this.rpc.sendRawFrame([2, messageId, action, payload]);
-			return 'sent';
+			this.rpc.releaseMessageId(messageId);
+			this.assertActive();
+			const dropped = this.queue.enqueue(action, payload, messageId);
+			this.emitQueue('enqueued', this.queue.size);
+			if (dropped !== undefined) {
+				this.emitQueue('overflow', this.queue.size, dropped);
+			}
+			return 'queued';
+		} catch (error) {
+			this.rpc.releaseMessageId(messageId);
+			throw error;
 		}
-		const messageId = this.messageIds();
-		const dropped = this.queue.enqueue(action, payload, messageId);
-		this.emitQueue('enqueued', this.queue.size);
-		if (dropped !== undefined) {
-			this.emitQueue('overflow', this.queue.size, dropped);
-		}
-		return 'queued';
 	}
 
 	onCall(action: string, handler: CallHandler): () => void {
@@ -328,11 +378,7 @@ export class EngineBase<S extends object> {
 
 	resetMetrics(): void {
 		this.metrics.reset();
-		this.events.emit({
-			type: 'metrics',
-			at: this.scheduler.now(),
-			errorCountLastMinute: 0,
-		});
+		this.emitMetrics();
 	}
 
 	getFaults(): FaultConfig {
@@ -525,7 +571,7 @@ export class EngineBase<S extends object> {
 			await this.flushQueue();
 			await this.profile.onReady(this, reason);
 		} catch (error) {
-			this.report(error);
+			this.reportBackgroundError(error);
 		}
 	}
 
@@ -534,13 +580,12 @@ export class EngineBase<S extends object> {
 			return;
 		}
 		for (let round = 0; round < 10 && this.isReady && this.queue.size > 0; round += 1) {
-			const result = await this.queue.flush((text) => {
-				const parsed = parseFrame(text);
-				if (parsed.ok && parsed.value[0] === 2) {
-					this.rpc.trackResult(parsed.value[1]);
-				}
-				return Promise.resolve(this.connection.sendText(text));
-			});
+			const result = await this.queue.flush((text) =>
+				this.rpc.sendQueuedFrame(text).then(() => undefined),
+			);
+			if (result.error !== undefined && this.isReady) {
+				this.report(result.error);
+			}
 			this.emitQueue('flushed', this.queue.size);
 			if (result.remaining === 0 || result.stoppedBy === 'send-failed') {
 				break;
@@ -558,12 +603,12 @@ export class EngineBase<S extends object> {
 			if (!this.isReady) {
 				return;
 			}
-			const at = this.scheduler.now();
 			try {
 				await this.rpc.sendCall('Heartbeat', {});
-				this.metrics.recordHeartbeat(interval, at);
+				this.metrics.recordHeartbeat(interval, this.scheduler.now());
+				this.emitMetrics();
 			} catch (error) {
-				this.report(error);
+				this.reportBackgroundError(error);
 			}
 		}, interval);
 	}
@@ -580,7 +625,7 @@ export class EngineBase<S extends object> {
 			Number.isFinite(delayMs) && delayMs > 0 ? delayMs : this.bootOptions.retryIntervalMs;
 		this.bootRetryCancel = this.scheduler.setTimeout(() => {
 			this.bootRetryCancel = undefined;
-			void this.bootNotification().catch((error: unknown) => this.report(error));
+			void this.bootNotification().catch((error: unknown) => this.reportBackgroundError(error));
 		}, delay);
 	}
 
@@ -599,12 +644,13 @@ export class EngineBase<S extends object> {
 			void this.becomeReady('open');
 		}
 		if (this.bootOptions.auto) {
-			void this.bootNotification().catch((error: unknown) => this.report(error));
+			void this.bootNotification().catch((error: unknown) => this.reportBackgroundError(error));
 		}
 	}
 
 	private handleTransportClose(event: TransportCloseEvent): void {
 		this.session += 1;
+		this.outbound.cancelAll();
 		this.ready = false;
 		this.bootPromise = undefined;
 		this.stopHeartbeat();
@@ -633,11 +679,97 @@ export class EngineBase<S extends object> {
 		});
 	}
 
+	private async validateFrame(frame: CallFrame): Promise<void> {
+		const validate = this.validateOutbound;
+		if (this.validationMode === 'off' || validate === undefined) {
+			return;
+		}
+		let errors: readonly string[] | null;
+		try {
+			errors = await validate(frame);
+		} catch (error) {
+			this.report(error);
+			if (this.validationMode === 'block') {
+				throw new SimulatorValidationError(frame[2], [
+					error instanceof Error ? error.message : 'The validation callback failed',
+				]);
+			}
+			return;
+		}
+		if (errors === null || errors.length === 0) {
+			return;
+		}
+		const blocked = this.validationMode === 'block';
+		const at = this.scheduler.now();
+		this.events.emit({
+			type: 'validation',
+			at,
+			mode: this.validationMode,
+			action: frame[2],
+			errors: [...errors],
+			blocked,
+		});
+		const entry = {
+			at,
+			direction: 'system' as const,
+			messageType: 'SYSTEM' as const,
+			action: `[VALIDATION] ${frame[2]}`,
+			messageId: frame[1],
+			level: blocked ? ('error' as const) : ('warning' as const),
+			code: blocked ? 'validation-blocked' : 'validation-warning',
+			data: { errors: [...errors] },
+		};
+		this.history.add(entry);
+		this.events.emit({ type: 'log', at, entry });
+		this.events.emit({
+			type: 'notice',
+			at,
+			level: blocked ? 'error' : 'warning',
+			message: `Outbound ${frame[2]} failed validation`,
+			code: 'validation',
+		});
+		if (blocked) {
+			this.metrics.recordError(at);
+			this.emitMetrics();
+			throw new SimulatorValidationError(frame[2], errors);
+		}
+	}
+
+	private needsValidation(): boolean {
+		return this.validationMode !== 'off' && this.validateOutbound !== undefined;
+	}
+
+	private emitMetrics(): void {
+		const at = this.scheduler.now();
+		this.events.emit({
+			type: 'metrics',
+			at,
+			errorCountLastMinute: this.metrics.snapshot(at).errorCountLastMinute,
+		});
+	}
+
+	private reportBackgroundError(error: unknown): void {
+		if (error instanceof SimulatorError) {
+			const code = error.code;
+			if (
+				code === 'validation-blocked' ||
+				code === 'timeout' ||
+				code === 'call-error' ||
+				code === 'send-failed' ||
+				code === 'invalid-response' ||
+				code === 'cancelled' ||
+				code === 'disconnected'
+			) {
+				return;
+			}
+		}
+		this.report(error);
+	}
+
 	private report(error: unknown): void {
 		if (this.disposed) {
 			return;
 		}
-		this.metrics.recordError(this.scheduler.now());
 		this.events.emit({
 			type: 'error',
 			at: this.scheduler.now(),

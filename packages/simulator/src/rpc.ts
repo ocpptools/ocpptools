@@ -17,7 +17,12 @@ import {
 } from '@ocpptools/core';
 
 import type { Scheduler } from './clock.js';
-import { SimulatorCallError, SimulatorError, errorSnapshot } from './errors.js';
+import {
+	SimulatorCallError,
+	SimulatorError,
+	errorSnapshot,
+	isAlreadyCountedError,
+} from './errors.js';
 import type { SimulatorErrorCode } from './errors.js';
 import type { EventEmitter } from './events.js';
 import {
@@ -29,6 +34,7 @@ import {
 	type InboundFrameFailure,
 } from './frames.js';
 import type { History } from './log.js';
+import type { OutboundDelivery, OutboundInput } from './outbound.js';
 
 export interface PendingCall {
 	readonly messageId: MessageId;
@@ -58,6 +64,8 @@ export interface RpcOptions {
 	readonly sendText: (text: string) => Promise<void>;
 	readonly isOpen: () => boolean;
 	readonly timeoutMs?: number;
+	readonly outbound?: (input: OutboundInput) => Promise<OutboundDelivery>;
+	readonly validate?: (frame: CallFrame) => void | Promise<void>;
 }
 
 type PendingState = 'preparing' | 'sending' | 'sent';
@@ -72,6 +80,7 @@ interface PendingEntry {
 	readonly reject: (error: SimulatorError) => void;
 	state: PendingState;
 	settled: boolean;
+	cancelled: boolean;
 	expiresAt?: number;
 	cancelTimeout?: () => void;
 	epoch: number;
@@ -94,6 +103,9 @@ export class Rpc {
 	private readonly inboundCalls = new Map<MessageId, InboundEntry>();
 	private readonly recentlyReplied = new Set<MessageId>();
 	private readonly trackedResults = new Set<MessageId>();
+	private readonly ignoredResults = new Set<MessageId>();
+	private readonly reservedIds = new Set<MessageId>();
+	private cancelGeneration = 0;
 	private readonly handlers = new Map<string, CallHandler>();
 	private readonly timeoutMs: number;
 	private epoch = 0;
@@ -129,6 +141,29 @@ export class Rpc {
 		}
 	}
 
+	/** Marks a canceled ID whose late reply must be consumed silently. */
+	private ignoreResult(messageId: MessageId): void {
+		this.ignoredResults.add(messageId);
+		if (this.ignoredResults.size > 1000) {
+			const oldest = this.ignoredResults.values().next().value;
+			if (oldest !== undefined) {
+				this.ignoredResults.delete(oldest);
+			}
+		}
+	}
+
+	/** Allocates and reserves an ID for a CALL that does not use sendCall. */
+	reserveMessageId(): MessageId {
+		this.assertActive();
+		const messageId = this.nextMessageId();
+		this.reservedIds.add(messageId);
+		return messageId;
+	}
+
+	releaseMessageId(messageId: MessageId): void {
+		this.reservedIds.delete(messageId);
+	}
+
 	onCall(action: string, handler: CallHandler): () => void {
 		this.handlers.set(action, handler);
 		return () => {
@@ -147,37 +182,9 @@ export class Rpc {
 			const messageId = this.nextMessageId();
 			const frame: CallFrame = [MESSAGE_TYPE.CALL, messageId, action, payload];
 			const text = writeFrame(frame);
-
-			const promise = new Promise<JsonObject>((resolve, reject) => {
-				const entry: PendingEntry = {
-					messageId,
-					action,
-					frame,
-					text,
-					createdAt: this.options.scheduler.now(),
-					resolve,
-					reject,
-					state: 'preparing',
-					settled: false,
-					epoch: this.epoch,
-				};
-				this.pending.set(messageId, entry);
-				this.emitPending('added', entry);
-				if (entry.settled || entry.epoch !== this.epoch || this.disposed) {
-					return;
-				}
-				void this.transmit(entry).catch((error: unknown) => {
-					if (!entry.settled) {
-						this.settleReject(
-							entry,
-							new SimulatorError('internal-error', 'The call could not be prepared', {
-								cause: error,
-							}),
-							'rejected',
-						);
-					}
-					this.report(error);
-				});
+			this.reservedIds.add(messageId);
+			const promise = this.prepareCall(frame, text, messageId).finally(() => {
+				this.reservedIds.delete(messageId);
 			});
 			// Mark the caller-visible promise as handled even when nobody awaits it;
 			// the original rejection still reaches an await or a catch.
@@ -196,6 +203,63 @@ export class Rpc {
 		}
 	}
 
+	private async prepareCall(
+		frame: CallFrame,
+		text: string,
+		messageId: MessageId,
+	): Promise<JsonObject> {
+		const epoch = this.epoch;
+		const cancelGeneration = this.cancelGeneration;
+		if (this.options.validate !== undefined) {
+			await this.options.validate(frame);
+		}
+		if (this.disposed) {
+			throw new SimulatorError('disposed', 'The RPC framework is disposed');
+		}
+		if (cancelGeneration !== this.cancelGeneration) {
+			throw new SimulatorError('cancelled', 'Pending calls were cleared');
+		}
+		if (epoch !== this.epoch) {
+			throw new SimulatorError('disconnected', 'The connection changed before the call was sent');
+		}
+		if (!this.options.isOpen()) {
+			throw new SimulatorError('not-connected', 'The transport is not open');
+		}
+		const action = frame[2];
+		return new Promise<JsonObject>((resolve, reject) => {
+			const entry: PendingEntry = {
+				messageId,
+				action,
+				frame,
+				text,
+				createdAt: this.options.scheduler.now(),
+				resolve,
+				reject,
+				state: 'preparing',
+				settled: false,
+				cancelled: false,
+				epoch,
+			};
+			this.pending.set(messageId, entry);
+			this.emitPending('added', entry);
+			if (entry.settled || entry.epoch !== this.epoch || this.disposed) {
+				return;
+			}
+			void this.transmit(entry).catch((error: unknown) => {
+				if (!entry.settled) {
+					this.settleReject(
+						entry,
+						new SimulatorError('internal-error', 'The call could not be prepared', {
+							cause: error,
+						}),
+						'rejected',
+					);
+				}
+				this.report(error);
+			});
+		});
+	}
+
 	async sendCallResult(messageId: MessageId, payload: JsonObject): Promise<boolean> {
 		this.assertActive();
 		if (this.recentlyReplied.has(messageId)) {
@@ -209,9 +273,9 @@ export class Rpc {
 			return this.reply(inbound, payload);
 		}
 		const frame: CallResultFrame = [MESSAGE_TYPE.CALLRESULT, messageId, payload];
-		await this.sendFrame(frame);
+		const delivered = await this.sendFrame(frame);
 		this.rememberReplied(messageId);
-		return true;
+		return delivered;
 	}
 
 	async sendCallError(
@@ -237,9 +301,9 @@ export class Rpc {
 		if (inbound !== undefined) {
 			return this.fail(inbound, errorCode, errorDescription, errorDetails);
 		}
-		await this.sendErrorRaw(messageId, errorCode, errorDescription, errorDetails);
+		const delivered = await this.sendErrorRaw(messageId, errorCode, errorDescription, errorDetails);
 		this.rememberReplied(messageId);
-		return true;
+		return delivered;
 	}
 
 	async sendRawFrame(frame: readonly unknown[]): Promise<void> {
@@ -259,13 +323,33 @@ export class Rpc {
 		if (!this.options.isOpen()) {
 			throw new SimulatorError('not-connected', 'The transport is not open');
 		}
-		await this.options.sendText(text);
 		const inspection = inspectFrame(frame);
 		const hasErrors = inspection.issues.some((issue) => issue.severity === 'error');
-		if (!hasErrors && inspection.messageType !== undefined) {
-			this.emitFrame('sent', frame as unknown as OcppFrame, text);
-		} else {
-			this.system('warning', 'Raw frame sent', { text: text.slice(0, 200) });
+		const kind =
+			inspection.messageType === MESSAGE_TYPE.CALL
+				? 'CALL'
+				: inspection.messageType === MESSAGE_TYPE.CALLRESULT
+					? 'CALLRESULT'
+					: inspection.messageType === MESSAGE_TYPE.CALLERROR
+						? 'CALLERROR'
+						: 'RAW';
+		const delivery = await this.deliver({
+			text,
+			...(hasErrors ? {} : { frame: frame as unknown as OcppFrame }),
+			kind,
+			...(inspection.messageId === undefined ? {} : { messageId: inspection.messageId }),
+			...(kind === 'CALL' && typeof frame[2] === 'string' ? { action: frame[2] } : {}),
+		});
+		if (delivery.cancelled) {
+			throw new SimulatorError('disconnected', 'The outbound frame was cancelled');
+		}
+		if (!delivery.delivered) {
+			return;
+		}
+		if (!hasErrors && inspection.messageType !== undefined && !delivery.malformed) {
+			this.emitFrame('sent', frame as unknown as OcppFrame, delivery.text);
+		} else if (!delivery.malformed) {
+			this.system('warning', 'Raw frame sent', { text: delivery.text.slice(0, 200) });
 		}
 	}
 
@@ -274,8 +358,52 @@ export class Rpc {
 		if (!this.options.isOpen()) {
 			throw new SimulatorError('not-connected', 'The transport is not open');
 		}
-		await this.options.sendText(text);
-		this.system('info', 'Raw text sent', { text: text.slice(0, 200) });
+		const delivery = await this.deliver({ text, kind: 'RAW' });
+		if (delivery.cancelled) {
+			throw new SimulatorError('disconnected', 'The outbound text was cancelled');
+		}
+		if (delivery.delivered) {
+			this.system('info', 'Raw text sent', { text: delivery.text.slice(0, 200) });
+		}
+	}
+
+	/**
+	 * Delivers a CALL that was previously queued. The frame was validated
+	 * before enqueueing, so this path applies only the outbound fault pipeline.
+	 */
+	async sendQueuedFrame(text: string): Promise<boolean> {
+		this.assertActive();
+		if (!this.options.isOpen()) {
+			throw new SimulatorError('not-connected', 'The transport is not open');
+		}
+		const frame = parseQueuedCall(text);
+		if (frame !== undefined) {
+			this.trackResult(frame[1]);
+		}
+		const delivery = await this.deliver({
+			text,
+			...(frame === undefined ? {} : { frame }),
+			kind: 'CALL',
+			...(frame === undefined ? {} : { action: frame[2], messageId: frame[1] }),
+		});
+		if (delivery.cancelled) {
+			throw new SimulatorError('disconnected', 'The queued CALL was cancelled');
+		}
+		if (delivery.delivered && !delivery.malformed && frame !== undefined) {
+			this.emitFrame('sent', frame, delivery.text);
+		}
+		return delivery.delivered;
+	}
+
+	private async deliver(input: OutboundInput): Promise<OutboundDelivery> {
+		if (this.options.outbound !== undefined) {
+			return this.options.outbound(input);
+		}
+		if (!this.options.isOpen()) {
+			throw new SimulatorError('not-connected', 'The transport is not open');
+		}
+		await this.options.sendText(input.text);
+		return { delivered: true, text: input.text, malformed: false, cancelled: false };
 	}
 
 	/** Handles one text frame received from the peer. */
@@ -325,6 +453,7 @@ export class Rpc {
 			}
 		}
 		this.trackedResults.clear();
+		this.ignoredResults.clear();
 	}
 
 	dispose(): void {
@@ -348,8 +477,9 @@ export class Rpc {
 	}
 
 	cancelAll(reason: string, code: SimulatorErrorCode = 'disconnected'): void {
+		this.cancelGeneration += 1;
 		for (const entry of [...this.pending.values()]) {
-			this.trackResult(entry.messageId);
+			this.ignoreResult(entry.messageId);
 			this.settleReject(entry, new SimulatorError(code, reason), 'cancelled');
 		}
 	}
@@ -359,8 +489,16 @@ export class Rpc {
 			return;
 		}
 		entry.state = 'sending';
+		let delivery: OutboundDelivery;
 		try {
-			await this.options.sendText(entry.text);
+			delivery = await this.deliver({
+				text: entry.text,
+				frame: entry.frame,
+				kind: 'CALL',
+				action: entry.action,
+				messageId: entry.messageId,
+				isCancelled: () => entry.cancelled,
+			});
 		} catch (error) {
 			if (!entry.settled && entry.epoch === this.epoch) {
 				this.settleReject(
@@ -375,8 +513,14 @@ export class Rpc {
 		}
 
 		// The frame reached the transport. Record it even when a loopback
-		// transport delivered the response before sendText resolved.
-		this.emitFrame('sent', entry.frame, entry.text);
+		// transport delivered the response before sendText resolved. A canceled
+		// delivery never records a sent frame.
+		if (delivery.cancelled) {
+			return;
+		}
+		if (delivery.delivered && !delivery.malformed) {
+			this.emitFrame('sent', entry.frame, delivery.text);
+		}
 		if (entry.settled || entry.epoch !== this.epoch || this.disposed) {
 			return;
 		}
@@ -470,11 +614,11 @@ export class Rpc {
 			})
 			.catch((error: unknown) => {
 				if (entry.replied || this.inboundCalls.get(messageId) !== entry) {
-					this.report(error);
+					this.report(error, !isAlreadyCountedError(error));
 					return;
 				}
 				this.inboundCalls.delete(messageId);
-				this.report(error);
+				this.report(error, !isAlreadyCountedError(error));
 				if (entry.epoch === this.epoch) {
 					void this.sendErrorRaw(messageId, 'InternalError', 'Inbound handler failed').catch(
 						(replyError: unknown) => this.report(replyError),
@@ -493,14 +637,8 @@ export class Rpc {
 		if (this.inboundCalls.get(entry.messageId) !== entry) {
 			this.report(
 				new SimulatorError('disconnected', `Reply for ${entry.action} dropped after reset`),
+				false,
 			);
-			return false;
-		}
-		let text: string;
-		try {
-			text = writeFrame([MESSAGE_TYPE.CALLRESULT, entry.messageId, payload]);
-		} catch (error) {
-			this.report(error);
 			return false;
 		}
 		entry.replied = true;
@@ -509,13 +647,12 @@ export class Rpc {
 		if (entry.epoch !== this.epoch || !this.options.isOpen()) {
 			this.report(
 				new SimulatorError('disconnected', `Reply for ${entry.action} dropped after reconnect`),
+				false,
 			);
 			return false;
 		}
 		try {
-			await this.options.sendText(text);
-			this.emitFrame('sent', [MESSAGE_TYPE.CALLRESULT, entry.messageId, payload], text);
-			return true;
+			return await this.sendFrame([MESSAGE_TYPE.CALLRESULT, entry.messageId, payload]);
 		} catch (error) {
 			this.report(error);
 			return false;
@@ -535,6 +672,7 @@ export class Rpc {
 		if (this.inboundCalls.get(entry.messageId) !== entry) {
 			this.report(
 				new SimulatorError('disconnected', `Reply for ${entry.action} dropped after reset`),
+				false,
 			);
 			return false;
 		}
@@ -547,30 +685,24 @@ export class Rpc {
 			);
 			return false;
 		}
-		let text: string;
-		try {
-			text = writeFrame([MESSAGE_TYPE.CALLERROR, entry.messageId, errorCode, description, details]);
-		} catch (error) {
-			this.report(error);
-			return false;
-		}
 		entry.replied = true;
 		this.rememberReplied(entry.messageId);
 		this.inboundCalls.delete(entry.messageId);
 		if (entry.epoch !== this.epoch || !this.options.isOpen()) {
 			this.report(
 				new SimulatorError('disconnected', `Reply for ${entry.action} dropped after reconnect`),
+				false,
 			);
 			return false;
 		}
 		try {
-			await this.options.sendText(text);
-			this.emitFrame(
-				'sent',
-				[MESSAGE_TYPE.CALLERROR, entry.messageId, errorCode, description, details],
-				text,
-			);
-			return true;
+			return await this.sendFrame([
+				MESSAGE_TYPE.CALLERROR,
+				entry.messageId,
+				errorCode,
+				description,
+				details,
+			]);
 		} catch (error) {
 			this.report(error);
 			return false;
@@ -583,6 +715,9 @@ export class Rpc {
 		}
 		const entry = this.pending.get(frame[1]);
 		if (entry === undefined || entry.epoch !== epoch) {
+			if (this.ignoredResults.delete(frame[1])) {
+				return;
+			}
 			if (this.trackedResults.delete(frame[1])) {
 				return;
 			}
@@ -601,7 +736,13 @@ export class Rpc {
 			this.system('warning', `Unknown OCPP ${this.version} CALLERROR code ${frame[2]}`);
 		}
 		if (entry === undefined || entry.epoch !== epoch) {
+			if (this.ignoredResults.delete(frame[1])) {
+				return;
+			}
 			if (this.trackedResults.delete(frame[1])) {
+				this.report(
+					new SimulatorError('call-error', `CALLERROR ${frame[2]} for ${frame[1]}: ${frame[3]}`),
+				);
 				return;
 			}
 			this.report(new SimulatorError('invalid-response', `Unknown CALLERROR ${frame[1]}`));
@@ -618,6 +759,32 @@ export class Rpc {
 	}
 
 	private handleMalformed(inbound: InboundFrameFailure, epoch: number): void {
+		const isResponse =
+			inbound.messageType === MESSAGE_TYPE.CALLRESULT ||
+			inbound.messageType === MESSAGE_TYPE.CALLERROR;
+		if (
+			isResponse &&
+			inbound.messageId !== undefined &&
+			this.ignoredResults.delete(inbound.messageId)
+		) {
+			return;
+		}
+		const pending =
+			isResponse && inbound.messageId !== undefined && epoch === this.epoch
+				? this.pending.get(inbound.messageId)
+				: undefined;
+		if (pending !== undefined && pending.epoch === epoch) {
+			this.system('warning', inbound.error.message, {
+				messageType: inbound.messageType,
+				messageId: inbound.messageId,
+			});
+			this.settleReject(
+				pending,
+				new SimulatorError('invalid-response', 'The peer sent a malformed response'),
+				'rejected',
+			);
+			return;
+		}
 		this.system('error', inbound.error.message, {
 			messageType: inbound.messageType,
 			messageId: inbound.messageId,
@@ -633,19 +800,7 @@ export class Rpc {
 			);
 			return;
 		}
-		if (
-			(inbound.messageType === MESSAGE_TYPE.CALLRESULT ||
-				inbound.messageType === MESSAGE_TYPE.CALLERROR) &&
-			inbound.messageId !== undefined
-		) {
-			const entry = this.pending.get(inbound.messageId);
-			if (entry !== undefined && entry.epoch === epoch) {
-				this.settleReject(
-					entry,
-					new SimulatorError('invalid-response', 'The peer sent a malformed response'),
-					'rejected',
-				);
-			}
+		if (isResponse && inbound.messageId !== undefined) {
 			return;
 		}
 		if (
@@ -674,7 +829,12 @@ export class Rpc {
 			if (id.length > 36) {
 				throw new SimulatorError('invalid-options', 'The message ID is longer than 36 characters');
 			}
-			if (!this.pending.has(id) && !this.trackedResults.has(id)) {
+			if (
+				!this.pending.has(id) &&
+				!this.trackedResults.has(id) &&
+				!this.ignoredResults.has(id) &&
+				!this.reservedIds.has(id)
+			) {
 				return id;
 			}
 		}
@@ -706,6 +866,9 @@ export class Rpc {
 			return;
 		}
 		entry.settled = true;
+		if (phase === 'cancelled') {
+			entry.cancelled = true;
+		}
 		if (this.pending.get(entry.messageId) === entry) {
 			this.pending.delete(entry.messageId);
 		}
@@ -741,14 +904,29 @@ export class Rpc {
 		}
 	}
 
-	private async sendFrame(frame: OcppFrame): Promise<void> {
+	private async sendFrame(frame: OcppFrame): Promise<boolean> {
 		this.assertActive();
 		if (!this.options.isOpen()) {
 			throw new SimulatorError('not-connected', 'The transport is not open');
 		}
 		const text = writeFrame(frame);
-		await this.options.sendText(text);
-		this.emitFrame('sent', frame, text);
+		const kind =
+			frame[0] === MESSAGE_TYPE.CALL
+				? 'CALL'
+				: frame[0] === MESSAGE_TYPE.CALLRESULT
+					? 'CALLRESULT'
+					: 'CALLERROR';
+		const delivery = await this.deliver({
+			text,
+			frame,
+			kind,
+			...(frame[0] === MESSAGE_TYPE.CALL ? { action: frame[2] } : {}),
+			messageId: frame[1],
+		});
+		if (delivery.delivered && !delivery.malformed) {
+			this.emitFrame('sent', frame, delivery.text);
+		}
+		return delivery.delivered;
 	}
 
 	private async sendErrorRaw(
@@ -756,7 +934,7 @@ export class Rpc {
 		errorCode: string,
 		errorDescription: string,
 		errorDetails: JsonObject = {},
-	): Promise<void> {
+	): Promise<boolean> {
 		const frame: CallErrorFrame = [
 			MESSAGE_TYPE.CALLERROR,
 			messageId,
@@ -764,7 +942,7 @@ export class Rpc {
 			errorDescription,
 			errorDetails,
 		];
-		await this.sendFrame(frame);
+		return this.sendFrame(frame);
 	}
 
 	private emitFrame(direction: 'sent' | 'received', frame: OcppFrame, text: string): void {
@@ -815,7 +993,7 @@ export class Rpc {
 		}
 	}
 
-	private report(error: unknown): void {
+	private report(error: unknown, countsAsError = true): void {
 		const at = this.options.scheduler.now();
 		const message = error instanceof Error ? error.message : 'Unknown simulator error';
 		const entry = {
@@ -832,6 +1010,7 @@ export class Rpc {
 			at,
 			error: errorSnapshot(error),
 			fatal: false,
+			...(countsAsError ? {} : { countsAsError: false }),
 		});
 	}
 
@@ -847,6 +1026,27 @@ function validateTimeout(timeoutMs: number): number {
 		throw new SimulatorError('invalid-options', `Invalid call timeout: ${String(timeoutMs)}`);
 	}
 	return timeoutMs;
+}
+
+function parseQueuedCall(text: string): CallFrame | undefined {
+	try {
+		const value: unknown = JSON.parse(text);
+		if (
+			Array.isArray(value) &&
+			value.length === 4 &&
+			value[0] === MESSAGE_TYPE.CALL &&
+			typeof value[1] === 'string' &&
+			typeof value[2] === 'string' &&
+			typeof value[3] === 'object' &&
+			value[3] !== null &&
+			!Array.isArray(value[3])
+		) {
+			return value as unknown as CallFrame;
+		}
+	} catch {
+		return undefined;
+	}
+	return undefined;
 }
 
 function toJson(value: unknown): JsonObject | undefined {

@@ -4,7 +4,7 @@
 import type { JsonObject } from '@ocpptools/core';
 
 import type { EngineBase } from '../../engine.js';
-import { SimulatorError } from '../../errors.js';
+import { SimulatorError, isAlreadyCountedError } from '../../errors.js';
 import type { CallContext } from '../../rpc.js';
 import type { Evse201, Simulator201State } from './index.js';
 
@@ -647,5 +647,6 @@ function reportLocalAuthError(engine: EngineBase<Simulator201State>, error: unkn
 			message: error instanceof Error ? error.message : 'Local authorization flow failed',
 		},
 		fatal: false,
+		countsAsError: !isAlreadyCountedError(error),
 	});
 }

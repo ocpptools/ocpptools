@@ -5,7 +5,7 @@ import type { JsonObject } from '@ocpptools/core';
 
 import type { EngineBase } from '../../engine.js';
 import type { CallContext } from '../../rpc.js';
-import { SimulatorError } from '../../errors.js';
+import { SimulatorError, isAlreadyCountedError } from '../../errors.js';
 import type { Simulator201State } from './index.js';
 
 export interface ChargingProfile201 {
@@ -571,5 +571,6 @@ function reportChargingError(engine: EngineBase<Simulator201State>, error: unkno
 			message: error instanceof Error ? error.message : 'Charging profile flow failed',
 		},
 		fatal: false,
+		countsAsError: !isAlreadyCountedError(error),
 	});
 }

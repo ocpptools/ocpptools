@@ -4,7 +4,7 @@
 import type { JsonObject } from '@ocpptools/core';
 
 import { EngineBase, type EngineProfile } from '../../engine.js';
-import { SimulatorError } from '../../errors.js';
+import { SimulatorError, isAlreadyCountedError } from '../../errors.js';
 import type { CallContext } from '../../rpc.js';
 import type { CommonSimulatorOptions } from '../../state.js';
 
@@ -385,6 +385,7 @@ function reportStartError16(engine: EngineBase<Simulator16State>, error: unknown
 			message: error instanceof Error ? error.message : 'Start failed',
 		},
 		fatal: false,
+		countsAsError: !isAlreadyCountedError(error),
 	});
 }
 

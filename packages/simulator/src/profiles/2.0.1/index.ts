@@ -4,7 +4,7 @@
 import type { JsonObject } from '@ocpptools/core';
 
 import { EngineBase, type EngineProfile } from '../../engine.js';
-import { SimulatorError } from '../../errors.js';
+import { SimulatorError, isAlreadyCountedError } from '../../errors.js';
 import type { CallContext } from '../../rpc.js';
 import type { CommonSimulatorOptions } from '../../state.js';
 import {
@@ -462,6 +462,7 @@ function reportProfileError(engine: EngineBase<Simulator201State>, error: unknow
 			message: error instanceof Error ? error.message : 'Simulator profile failed',
 		},
 		fatal: false,
+		countsAsError: !isAlreadyCountedError(error),
 	});
 }
 

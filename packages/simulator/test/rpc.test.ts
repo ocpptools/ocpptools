@@ -191,6 +191,57 @@ describe('Rpc', () => {
 		});
 	});
 
+	it('reserves IDs away from pending calls', async () => {
+		const clock = new FakeClock();
+		const ids = ['same', 'same', 'fresh'];
+		const rpc = new Rpc({
+			version: '1.6',
+			scheduler: new Scheduler(clock),
+			events: new EventEmitter(() => clock.now()),
+			history: new History(),
+			messageIds: () => ids.shift() ?? 'later',
+			sendText: async () => {
+				await Promise.resolve();
+			},
+			isOpen: () => true,
+		});
+		const call = rpc.sendCall('Heartbeat', {});
+		await flushMicrotasks();
+		expect(rpc.getPending()[0]?.messageId).toBe('same');
+		expect(rpc.reserveMessageId()).toBe('fresh');
+		rpc.releaseMessageId('fresh');
+		void call.catch(() => undefined);
+		rpc.dispose();
+	});
+
+	it('does not reuse a canceled message ID', async () => {
+		const clock = new FakeClock();
+		const ids = ['same', 'same', 'fresh'];
+		const rpc = new Rpc({
+			version: '1.6',
+			scheduler: new Scheduler(clock),
+			events: new EventEmitter(() => clock.now()),
+			history: new History(),
+			messageIds: () => ids.shift() ?? 'later',
+			sendText: async () => {
+				await Promise.resolve();
+			},
+			isOpen: () => true,
+		});
+		const first = rpc.sendCall('Heartbeat', {});
+		await flushMicrotasks();
+		rpc.cancelAll('cleared', 'cancelled');
+		await expect(first).rejects.toMatchObject({ code: 'cancelled' });
+		const second = rpc.sendCall('Heartbeat', {});
+		await flushMicrotasks();
+		expect(rpc.getPending()[0]?.messageId).toBe('fresh');
+		rpc.handleText('[3,"same",{"stale":true}]');
+		await flushMicrotasks();
+		expect(rpc.getPending()[0]?.messageId).toBe('fresh');
+		void second.catch(() => undefined);
+		rpc.dispose();
+	});
+
 	it('cancels pending calls and refuses work after dispose', async () => {
 		const { rpc } = createHarness();
 		const call = rpc.sendCall('Heartbeat', {});
