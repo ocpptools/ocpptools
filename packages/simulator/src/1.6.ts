@@ -2,6 +2,18 @@
 // SPDX-FileCopyrightText: 2026 Rodolfo Carrillo
 
 export { SIMULATOR_NAME } from './name.js';
+export { runScenario, scenarioEntityId, scenarioIdToken } from './scenario.js';
+export type {
+	ScenarioAdapter,
+	ScenarioEngine,
+	ScenarioOptions,
+	ScenarioResult,
+	ScenarioRun,
+	ScenarioStatus,
+	ScenarioStep,
+	ScenarioStepResult,
+	ScenarioStepStatus,
+} from './scenario.js';
 import { Simulator16 } from './profiles/1.6/index.js';
 import type { Simulator16Options } from './profiles/1.6/index.js';
 export { Simulator16 } from './profiles/1.6/index.js';

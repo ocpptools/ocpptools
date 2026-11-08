@@ -17,6 +17,7 @@ export class Scheduler {
 	private readonly onError: ((error: unknown) => void) | undefined;
 	private readonly timers = new Map<number, TimerHandle>();
 	private readonly sleeps = new Map<number, (completed: boolean) => void>();
+	private readonly cancelListeners = new Set<() => void>();
 	private nextId = 1;
 	private generation = 0;
 	private disposed = false;
@@ -96,6 +97,14 @@ export class Scheduler {
 		});
 	}
 
+	/** Registers a callback for cancelAll() and dispose(). */
+	onCancel(listener: () => void): () => void {
+		this.cancelListeners.add(listener);
+		return () => {
+			this.cancelListeners.delete(listener);
+		};
+	}
+
 	cancelAll(): void {
 		this.generation += 1;
 		for (const handle of this.timers.values()) {
@@ -106,6 +115,9 @@ export class Scheduler {
 			resolve(false);
 		}
 		this.sleeps.clear();
+		for (const listener of [...this.cancelListeners]) {
+			listener();
+		}
 	}
 
 	dispose(): void {

@@ -27,6 +27,7 @@ export type SimulatorErrorCode =
 	| 'invalid-snapshot'
 	| 'persistence-failed'
 	| 'scenario-cancelled'
+	| 'scenario-failed'
 	| 'callback-error'
 	| 'disposed'
 	| 'internal-error';

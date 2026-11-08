@@ -5,6 +5,18 @@ export { SIMULATOR_NAME } from './name.js';
 
 export { createSimulator } from './factory.js';
 export type { CreateSimulatorOptions } from './factory.js';
+export { runScenario, scenarioEntityId, scenarioIdToken } from './scenario.js';
+export type {
+	ScenarioAdapter,
+	ScenarioEngine,
+	ScenarioOptions,
+	ScenarioResult,
+	ScenarioRun,
+	ScenarioStatus,
+	ScenarioStep,
+	ScenarioStepResult,
+	ScenarioStepStatus,
+} from './scenario.js';
 export { Scheduler } from './clock.js';
 export { EngineBase } from './engine.js';
 export type { BootResponse, EngineProfile, EngineState } from './engine.js';

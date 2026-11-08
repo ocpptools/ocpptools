@@ -6,6 +6,14 @@ import type { JsonObject } from '@ocpptools/core';
 import { EngineBase, type EngineProfile } from '../../engine.js';
 import { SimulatorError, isAlreadyCountedError } from '../../errors.js';
 import type { CallContext } from '../../rpc.js';
+import {
+	runScenario,
+	scenarioEntityId,
+	scenarioIdToken,
+	type ScenarioOptions,
+	type ScenarioRun,
+	type ScenarioStep,
+} from '../../scenario.js';
 import type { CommonSimulatorOptions } from '../../state.js';
 
 export type ConnectorStatus16 =
@@ -938,32 +946,56 @@ export class Simulator16 extends EngineBase<Simulator16State> {
 		return this.sendCall('DataTransfer', payload);
 	}
 
+	runScenario(steps: readonly ScenarioStep[], options: ScenarioOptions = {}): ScenarioRun {
+		return runScenario(
+			this,
+			{
+				boot: () => this.bootNotification(),
+				heartbeat: () => this.sendHeartbeat(),
+				status: (step) =>
+					this.sendStatusNotification(
+						scenarioEntityId(step),
+						step.status as ConnectorStatus16 | undefined,
+					),
+				authorize: async (step) => {
+					const response = await this.authorize(
+						scenarioIdToken(step) ?? this.station.defaultIdTag ?? this.state.defaultIdTag,
+					);
+					const info = response['idTagInfo'] as Record<string, unknown> | undefined;
+					return info?.['status'] === 'Accepted';
+				},
+				start: (step) => this.startChargingSession(scenarioEntityId(step), scenarioIdToken(step)),
+				meter: (step) => this.sendMeterValues(scenarioEntityId(step)),
+				stop: (step) => this.stopTransaction(scenarioEntityId(step), step.reason),
+				call: (action, payload) => this.sendCall(action, payload),
+			},
+			steps,
+			options,
+		);
+	}
+
 	runChargingScenario(options: {
 		connectorId?: number;
 		idTag?: string;
 		durationMs?: number;
 		readings?: number;
 	}): { cancel: () => void; done: Promise<boolean> } {
-		let cancelled = false;
-		const done = (async () => {
-			const connectorId = options.connectorId ?? 1;
-			const started = await this.startChargingSession(connectorId, options.idTag);
-			if (!started.ok || cancelled) return false;
-			const readings = Math.max(0, options.readings ?? 1);
-			const duration = Math.max(1000, options.durationMs ?? 5000);
-			const step = Math.floor(duration / (readings + 1));
-			for (let index = 0; index < readings && !cancelled; index += 1) {
-				const slept = await this.scheduler.sleep(step);
-				if (!slept) break;
-			}
-			if (!cancelled) await this.stopTransaction(connectorId, 'Local');
-			return !cancelled;
-		})();
+		const connectorId = options.connectorId ?? 1;
+		const readings = Math.max(0, options.readings ?? 1);
+		const duration = Math.max(1000, options.durationMs ?? 5000);
+		const waitMs = Math.floor(duration / (readings + 1));
+		const steps: ScenarioStep[] = [
+			{ type: 'start', entityId: connectorId, idToken: options.idTag },
+			...Array.from({ length: readings }, (): ScenarioStep[] => [
+				{ type: 'wait', ms: waitMs },
+				{ type: 'meter', entityId: connectorId },
+			]).flat(),
+			{ type: 'stop', entityId: connectorId, reason: 'Local' },
+		];
+		const run = this.runScenario(steps);
 		return {
-			cancel: () => {
-				cancelled = true;
-			},
-			done,
+			cancel: () => run.cancel(),
+			done: run.done.then((result) => result.status === 'completed'),
 		};
 	}
 }
