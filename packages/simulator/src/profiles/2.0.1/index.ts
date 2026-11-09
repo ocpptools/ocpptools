@@ -50,10 +50,14 @@ import {
 	type SimulatedCertificate201,
 } from './security.js';
 import {
+	catalogVariablesFromState201,
 	createDeviceModelHandlers,
+	createDeviceModelVariables201,
 	createMonitoringState201,
 	evaluateMonitors201,
 	cancelMonitoringTimers201,
+	isDeviceModelVariable201,
+	knownDeviceModelComponent201,
 	rearmMonitoringTimers201,
 	sendNotifyEvent201,
 	variableCharacteristics201,
@@ -309,12 +313,7 @@ export function createSimulator201Profile(
 				starting: false,
 				updatedAt: 0,
 			})),
-			variables: {
-				'OCPPCommCtrlr/HeartbeatInterval': '60',
-				'AlignedDataCtrlr/Enabled': 'true',
-				'SampledDataCtrlr/TxUpdatedInterval': '30',
-				'DeviceDataCtrlr/Enabled': 'true',
-			},
+			variables: createDeviceModelVariables201(),
 			completedTransactions: [],
 			txSeq: 0,
 			pendingResets: { station: false, evseIds: [] },
@@ -552,7 +551,7 @@ function restoreTransaction201(
 
 function restoreVariables201(value: unknown): Simulator201State['variables'] {
 	if (!isRecord(value)) invalid201('variables must be an object');
-	const variables: Record<string, string> = {};
+	const variables = createDeviceModelVariables201();
 	for (const [key, entry] of Object.entries(value)) {
 		if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
 			invalid201('variables contains a reserved key');
@@ -1343,33 +1342,38 @@ export async function sendNotifyMonitoringReport201(
 }
 
 function reportDataFromVariables(engine: EngineBase<Simulator201State>): JsonObject[] {
-	return Object.entries(engine.state.variables).map(([key, value]) => {
+	const reportData: JsonObject[] = [];
+	for (const [key, value] of Object.entries(engine.state.variables)) {
+		if (!isDeviceModelVariable201(key)) continue;
 		const split = key.indexOf('/');
 		const component = split < 0 ? key : key.slice(0, split);
 		const variable = split < 0 ? key : key.slice(split + 1);
-		return {
+		reportData.push({
 			component: { name: component },
 			variable: { name: variable },
 			variableAttribute: [{ type: 'Actual', value, mutability: 'ReadWrite' }],
 			variableCharacteristics: variableCharacteristics201(value),
-		};
-	});
+		});
+	}
+	return reportData;
 }
 
 function monitoringDataFromState(engine: EngineBase<Simulator201State>): JsonObject[] {
-	return engine.state.monitoring.monitors.map((monitor) => ({
-		component: monitor.component,
-		variable: monitor.variable,
-		variableMonitoring: [
-			{
-				id: monitor.id,
-				transaction: monitor.transaction,
-				value: monitor.value,
-				type: monitor.type,
-				severity: monitor.severity,
-			},
-		],
-	}));
+	return engine.state.monitoring.monitors
+		.filter((monitor) => isDeviceModelVariable201(variableKey(monitor.component, monitor.variable)))
+		.map((monitor) => ({
+			component: monitor.component,
+			variable: monitor.variable,
+			variableMonitoring: [
+				{
+					id: monitor.id,
+					transaction: monitor.transaction,
+					value: monitor.value,
+					type: monitor.type,
+					severity: monitor.severity,
+				},
+			],
+		}));
 }
 
 export async function sendMeterValues201(
@@ -1897,11 +1901,13 @@ function getVariableResult(
 		result['attributeStatus'] = 'NotSupportedAttributeType';
 		return result;
 	}
-	if (!knownComponent(engine, component)) {
+	if (!knownDeviceModelComponent201(stringValue(component['name'], ''))) {
 		result['attributeStatus'] = 'UnknownComponent';
 		return result;
 	}
-	const value = engine.state.variables[variableKey(component, variable)];
+	const key = variableKey(component, variable);
+	if (!isDeviceModelVariable201(key)) return result;
+	const value = engine.state.variables[key];
 	if (value === undefined) return result;
 	result['attributeStatus'] = 'Accepted';
 	result['attributeValue'] = value;
@@ -1927,15 +1933,16 @@ function setVariableResult(
 		result['attributeStatus'] = 'NotSupportedAttributeType';
 		return result;
 	}
-	if (!knownComponent(engine, component)) {
+	if (!knownDeviceModelComponent201(stringValue(component['name'], ''))) {
 		result['attributeStatus'] = 'UnknownComponent';
 		return result;
 	}
+	const key = variableKey(component, variable);
+	if (!isDeviceModelVariable201(key)) return result;
 	if (typeof value !== 'string') {
 		result['attributeStatus'] = 'Rejected';
 		return result;
 	}
-	const key = variableKey(component, variable);
 	const current = engine.state.variables[key];
 	if (current === undefined) return result;
 	if (key === 'OCPPCommCtrlr/HeartbeatInterval') {
@@ -1982,7 +1989,9 @@ function setVariableResult(
 }
 
 function buildReportData(engine: EngineBase<Simulator201State>, reportBase: string): JsonObject[] {
-	return Object.entries(engine.state.variables).map(([key, value]) => {
+	const reportData: JsonObject[] = [];
+	for (const [key, value] of Object.entries(engine.state.variables)) {
+		if (!isDeviceModelVariable201(key)) continue;
 		const split = key.indexOf('/');
 		const component = split < 0 ? key : key.slice(0, split);
 		const variable = split < 0 ? key : key.slice(split + 1);
@@ -1994,8 +2003,9 @@ function buildReportData(engine: EngineBase<Simulator201State>, reportBase: stri
 		if (reportBase !== 'SummaryInventory') {
 			entry['variableCharacteristics'] = variableCharacteristics201(value);
 		}
-		return entry;
-	});
+		reportData.push(entry);
+	}
+	return reportData;
 }
 
 function componentRef(value: unknown): JsonObject {
@@ -2024,11 +2034,6 @@ function variableRef(value: unknown): JsonObject {
 
 function variableKey(component: JsonObject, variable: JsonObject): string {
 	return `${stringValue(component['name'], '')}/${stringValue(variable['name'], '')}`;
-}
-
-function knownComponent(engine: EngineBase<Simulator201State>, component: JsonObject): boolean {
-	const name = stringValue(component['name'], '');
-	return Object.keys(engine.state.variables).some((key) => key.startsWith(`${name}/`));
 }
 
 function idTokenKind(value: unknown): IdTokenKind201 {
@@ -2119,12 +2124,17 @@ export class Simulator201 extends EngineBase<Simulator201State> {
 		super(createSimulator201Profile(options.station, options.security), options);
 		this.station = options.station;
 		this.deviceModel = {
-			variables: () => clone(this.state.variables),
+			variables: () => catalogVariablesFromState201(this.state.variables),
 			sendReport: (reportOptions) => sendNotifyReport201(this, reportOptions),
 			sendMonitoringReport: (reportOptions) => sendNotifyMonitoringReport201(this, reportOptions),
 		};
 		this.monitoring = {
-			list: () => this.state.monitoring.monitors.map((monitor) => clone(monitor)),
+			list: () =>
+				this.state.monitoring.monitors
+					.filter((monitor) =>
+						isDeviceModelVariable201(variableKey(monitor.component, monitor.variable)),
+					)
+					.map((monitor) => clone(monitor)),
 			setBase: (base) => {
 				if (base !== 'All' && base !== 'FactoryDefault' && base !== 'HardWiredOnly') {
 					return Promise.resolve({ status: 'NotSupported' });

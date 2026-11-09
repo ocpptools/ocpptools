@@ -35,6 +35,45 @@ export interface MonitoringState201 {
 
 const monitorTimers = new WeakMap<object, Map<number, () => void>>();
 
+/**
+ * Hand-written device-model catalog for 2.0.1. Keys are
+ * `Component/Variable`. Keep this list small: a complete catalog derived from
+ * the OCA schemas is out of scope (ADR 0008). Protocol actions and reports
+ * expose only these variables.
+ */
+export const DEVICE_MODEL_CATALOG_201 = Object.freeze({
+	'OCPPCommCtrlr/HeartbeatInterval': '60',
+	'AlignedDataCtrlr/Enabled': 'true',
+	'SampledDataCtrlr/TxUpdatedInterval': '30',
+	'DeviceDataCtrlr/Enabled': 'true',
+} satisfies Record<string, string>);
+
+/** A mutable copy of the catalog for the simulator state. */
+export function createDeviceModelVariables201(): Record<string, string> {
+	return { ...DEVICE_MODEL_CATALOG_201 };
+}
+
+/** Whether a `Component/Variable` key belongs to the curated catalog. */
+export function isDeviceModelVariable201(key: string): boolean {
+	return Object.prototype.hasOwnProperty.call(DEVICE_MODEL_CATALOG_201, key);
+}
+
+/** Whether a component name has at least one variable in the curated catalog. */
+export function knownDeviceModelComponent201(name: string): boolean {
+	return Object.keys(DEVICE_MODEL_CATALOG_201).some((key) => key.startsWith(`${name}/`));
+}
+
+/** Returns a copy of the state variables that belong to the curated catalog. */
+export function catalogVariablesFromState201(
+	variables: Record<string, string>,
+): Record<string, string> {
+	const result: Record<string, string> = {};
+	for (const [key, value] of Object.entries(variables)) {
+		if (isDeviceModelVariable201(key)) result[key] = value;
+	}
+	return result;
+}
+
 export interface NetworkProfile201 {
 	configurationSlot: number;
 	connectionData: JsonObject;
@@ -139,6 +178,10 @@ export function createDeviceModelHandlers(
 				return;
 			}
 			const monitors = engine.state.monitoring.monitors.filter((monitor) => {
+				const variableKey = `${stringValue(monitor.component['name'], '')}/${stringValue(monitor.variable['name'], '')}`;
+				if (!isDeviceModelVariable201(variableKey)) {
+					return false;
+				}
 				if (
 					criteria.length > 0 &&
 					!criteria.some((value) => criterionMatches(value, monitor.type))
@@ -373,6 +416,9 @@ function armPeriodicMonitor(
 ): void {
 	cancelMonitorTimer(engine, monitor.id);
 	if (monitor.type !== 'Periodic' && monitor.type !== 'PeriodicClockAligned') return;
+	const componentName = stringValue(monitor.component['name'], '');
+	const variableName = stringValue(monitor.variable['name'], '');
+	if (!isDeviceModelVariable201(`${componentName}/${variableName}`)) return;
 	const timers = monitorTimers.get(engine) ?? new Map<number, () => void>();
 	monitorTimers.set(engine, timers);
 	const intervalMs = Math.max(1000, monitor.value * 1000);
@@ -396,8 +442,6 @@ function armPeriodicMonitor(
 				if (monitor.severity > engine.state.monitoring.level) return;
 				const hasTransaction = engine.state.evses.some((evse) => evse.transaction !== null);
 				if (monitor.transaction && !hasTransaction) return;
-				const componentName = stringValue(monitor.component['name'], '');
-				const variableName = stringValue(monitor.variable['name'], '');
 				const raw = engine.state.variables[`${componentName}/${variableName}`];
 				if (raw === undefined) return;
 				const numeric = Number(raw);
@@ -423,7 +467,8 @@ export function cancelMonitoringTimers201(engine: EngineBase<Simulator201State>)
 export function rearmMonitoringTimers201(engine: EngineBase<Simulator201State>): void {
 	cancelMonitoringTimers201(engine);
 	for (const monitor of engine.state.monitoring.monitors) {
-		armPeriodicMonitor(engine, monitor);
+		const key = `${stringValue(monitor.component['name'], '')}/${stringValue(monitor.variable['name'], '')}`;
+		if (isDeviceModelVariable201(key)) armPeriodicMonitor(engine, monitor);
 	}
 }
 
@@ -442,11 +487,16 @@ function setMonitor(
 	const result: JsonObject = { status: 'Rejected', type, severity, component, variable };
 	const componentName = stringValue(component['name'], '');
 	const variableName = stringValue(variable['name'], '');
-	if (!knownComponent(engine, componentName)) {
+	const key = `${componentName}/${variableName}`;
+	if (!knownDeviceModelComponent201(componentName)) {
 		result['status'] = 'UnknownComponent';
 		return result;
 	}
-	const stored = engine.state.variables[`${componentName}/${variableName}`];
+	if (!isDeviceModelVariable201(key)) {
+		result['status'] = 'UnknownVariable';
+		return result;
+	}
+	const stored = engine.state.variables[key];
 	if (stored === undefined) {
 		result['status'] = 'UnknownVariable';
 		return result;
@@ -637,6 +687,7 @@ function reportDataFor(
 ): JsonObject[] {
 	const reportData: JsonObject[] = [];
 	for (const [key, value] of Object.entries(engine.state.variables)) {
+		if (!isDeviceModelVariable201(key)) continue;
 		const split = key.indexOf('/');
 		const componentName = split < 0 ? key : key.slice(0, split);
 		const variableName = split < 0 ? key : key.slice(split + 1);
@@ -778,10 +829,6 @@ function variableRef(value: Record<string, unknown>): JsonObject {
 	const result: JsonObject = { name: stringValue(value['name'], '') };
 	if (typeof value['instance'] === 'string') result['instance'] = value['instance'];
 	return result;
-}
-
-function knownComponent(engine: EngineBase<Simulator201State>, name: string): boolean {
-	return Object.keys(engine.state.variables).some((key) => key.startsWith(`${name}/`));
 }
 
 function strictObjectArray(value: unknown): Record<string, unknown>[] | undefined {
