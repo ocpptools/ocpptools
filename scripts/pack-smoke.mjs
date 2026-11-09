@@ -407,6 +407,81 @@ for (const bucket of ['dependencies', 'peerDependencies', 'optionalDependencies'
 }
 `,
 	},
+	{
+		directory: 'cli',
+		name: 'ocpptools',
+		workspaceDependencies: ['core', 'schema-utils', 'validator', 'simulator', 'schemas'],
+		exports: [
+			'CLI_VERSION',
+			'UsageError',
+			'applySimulatorConfig',
+			'createCliSchemaRegistry',
+			'createCliValidator',
+			'createConfiguredSimulator',
+			'formatSimulationResult',
+			'formatValidationResult',
+			'loadScenarioFile',
+			'loadSimulatorConfig',
+			'parseArgs',
+			'parseScenario',
+			'parseSimulatorConfig',
+			'readInput',
+			'runCli',
+			'runSimulation',
+			'usage',
+			'validateFrameFile',
+		],
+		requiredFiles: [
+			'package.json',
+			'README.md',
+			'LICENSE',
+			'NOTICE',
+			'dist/index.js',
+			'dist/index.d.ts',
+			'dist/bin.js',
+		],
+		behavior: `
+const { execFileSync } = await import('node:child_process');
+const { mkdtemp, rm, writeFile } = await import('node:fs/promises');
+const { readFileSync } = await import('node:fs');
+const { createRequire } = await import('node:module');
+const { tmpdir } = await import('node:os');
+const { dirname, join } = await import('node:path');
+const require = createRequire(import.meta.url);
+const packageFile = require.resolve('ocpptools/package.json');
+const manifest = JSON.parse(readFileSync(packageFile, 'utf8'));
+assert.equal(manifest.bin.ocpptools, './dist/bin.js');
+assert.deepEqual(Object.keys(manifest.exports).sort(), ['.', './package.json']);
+for (const bucket of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
+	assert.ok(!Object.hasOwn(manifest[bucket] ?? {}, 'ws'), 'ws must not be a runtime dependency');
+}
+assert.equal(typeof pkg.runCli, 'function');
+assert.equal(pkg.CLI_VERSION, manifest.version);
+const bin = join(dirname(packageFile), 'dist', 'bin.js');
+const versionText = execFileSync(process.execPath, [bin, '--version'], { encoding: 'utf8' });
+assert.match(versionText, /^ocpptools \\d+\\.\\d+\\.\\d+\\n$/);
+const helpText = execFileSync(process.execPath, [bin, '--help'], { encoding: 'utf8' });
+assert.match(helpText, /ocpptools validate/);
+const directory = await mkdtemp(join(tmpdir(), 'ocpptools-cli-'));
+try {
+	const frame = join(directory, 'frame.json');
+	await writeFile(
+		frame,
+		JSON.stringify([2, 'smoke', 'BootNotification', { chargePointVendor: 'Acme', chargePointModel: 'AC-7' }]),
+	);
+	const output = execFileSync(
+		process.execPath,
+		[bin, 'validate', frame, '--version', '1.6', '--json'],
+		{ encoding: 'utf8' },
+	);
+	const result = JSON.parse(output);
+	assert.equal(result.status, 'valid');
+	assert.equal(result.valid, true);
+} finally {
+	await rm(directory, { recursive: true, force: true });
+}
+`,
+	},
 ];
 
 /**
@@ -426,12 +501,13 @@ function run(command, args, cwd = root) {
 /**
  * Packs a package into an empty directory and returns the tarball's path.
  *
- * @param {string} name
+ * @param {string} directory
  * @param {string} destination
  */
-async function pack(name, destination) {
+async function pack(directory, destination) {
 	await mkdir(resolve(root, destination), { recursive: true });
-	run('pnpm', ['--filter', name, 'pack', '--pack-destination', destination]);
+	// Filter by path, not by name: the root package is also called `ocpptools`.
+	run('pnpm', ['--filter', `./packages/${directory}`, 'pack', '--pack-destination', destination]);
 	const tarballs = (await readdir(resolve(root, destination))).filter((file) =>
 		file.endsWith('.tgz'),
 	);
@@ -457,7 +533,10 @@ async function install(pkg, tarball, workDir) {
 		if (dependency === undefined) {
 			throw new Error(`Unknown workspace dependency of ${pkg.name}: ${directory}`);
 		}
-		const dependencyTarball = await pack(dependency.name, `${workDir}/dependencies/${directory}`);
+		const dependencyTarball = await pack(
+			dependency.directory,
+			`${workDir}/dependencies/${directory}`,
+		);
 		overrides.push(
 			`  ${JSON.stringify(dependency.name)}: ${JSON.stringify(`file:../dependencies/${directory}/${basename(dependencyTarball)}`)}`,
 		);
@@ -480,7 +559,7 @@ async function check(pkg) {
 	const workDir = `${cacheDir}/${pkg.directory}`;
 
 	await rm(resolve(root, workDir), { recursive: true, force: true });
-	const tarball = await pack(pkg.name, workDir);
+	const tarball = await pack(pkg.directory, workDir);
 
 	const entries = run('tar', ['-tzf', tarball])
 		.split('\n')

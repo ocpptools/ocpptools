@@ -52,8 +52,9 @@ against a mock CSMS.
 Status: implemented for all 28 OCPP 1.6J actions and all 64 OCPP 2.0.1 actions,
 with the browser adapter, schema-valid action matrices, fault injection,
 outbound validation, metrics, scenarios, snapshots, completed 1.6 semantics,
-and hardened 2.0.1 features. 0.2.0 is published. The Node adapter is the first
-piece of Phase 7, and the site UI migration remains.
+and hardened 2.0.1 features. 0.2.0 is published. The Node adapter and the
+`ocpptools` CLI are the first pieces of Phase 7, and the site UI migration
+remains.
 
 ## Phase 5 — Builder
 
@@ -69,11 +70,15 @@ copies or adaptations of the OCPP schemas.
 
 ## Phase 7 — Node adapter, kit, and CLI
 
-Start with the Node adapter in `@ocpptools/simulator/node`, then create
-`@ocpptools/kit` and the `ocpptools` CLI only after the earlier packages are
-stable. `kit` uses explicit exports, not indiscriminate `export *`. The CLI
-consumes the Node adapter, is published last, and must be functional, not a
+Start with the Node adapter in `@ocpptools/simulator/node`, then the
+`ocpptools` CLI, which consumes it. Create `@ocpptools/kit` only after the
+earlier packages are stable and real consumers ask for it. `kit` uses explicit
+exports, not indiscriminate `export *`. The CLI must stay functional, not a
 placeholder.
+
+Status: the Node adapter and the `ocpptools` CLI are implemented and tested.
+The CLI validates frames with `@ocpptools/validator` and runs simulator
+scenarios against a CSMS. `@ocpptools/kit` remains.
 
 ## Phase 8 — Launch
 

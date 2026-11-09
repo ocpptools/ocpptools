@@ -1,5 +1,5 @@
 {
-  "name": "ocpptools",
+  "name": "ocpptools-monorepo",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -26,20 +26,20 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc -b --pretty false tsconfig.json",
-    "typecheck:test": "pnpm -r --filter @ocpptools/* --if-present run typecheck:test",
+    "typecheck:test": "pnpm -r --filter @ocpptools/* --filter ocpptools --if-present run typecheck:test",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "pnpm build && changeset publish",
-    "lint:packages": "pnpm -r --filter @ocpptools/* --if-present run lint:package",
+    "lint:packages": "pnpm -r --filter @ocpptools/* --filter ocpptools --if-present run lint:package",
     "test:pack": "node scripts/pack-smoke.mjs",
     "lint:ai-files": "node scripts/check-no-ai-files.mjs",
     "lint:schemas": "node scripts/check-no-oca-schemas.mjs && node scripts/check-verbatim-schemas.mjs",
     "lint:licenses": "reuse lint",
     "verify": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm typecheck:test && pnpm test:coverage && pnpm build && pnpm bundle:check && pnpm lint:packages && pnpm test:pack && pnpm size && pnpm lint:ai-files && pnpm lint:schemas && pnpm lint:licenses",
     "docs:api": "typedoc",
-    "size": "pnpm -r --filter @ocpptools/* --if-present run size"
+    "size": "pnpm -r --filter @ocpptools/* --filter ocpptools --if-present run size"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18",

@@ -59,8 +59,11 @@ order before opening a pull request:
 - `validator`: Ajv with an injectable schema registry. No DOM. Lazy compilation
   per action.
 - `simulator`: headless protocol engine. The browser and Node transports live
-  in separate subpaths; the Node adapter starts Phase 7 and the CLI comes last.
-  No DOM, toasts, panels, or Tailwind in the engine.
+  in separate subpaths; the Node adapter and CLI start Phase 7, while builder
+  and kit remain later. No DOM, toasts, panels, or Tailwind in the engine.
+- `ocpptools` (in `packages/cli`): the command-line wrapper. It composes the
+  validator and the simulator Node adapter; it does not own protocol or schema
+  logic.
 - `builder`: headless payload and frame construction. No UI or Tailwind.
 - `schemas`: unmodified copies of the Open Charge Alliance's JSON Schemas, with
   their license and attribution (see

@@ -17,6 +17,7 @@ body:
         - '@ocpptools/validator'
         - '@ocpptools/simulator'
         - '@ocpptools/builder'
+        - 'ocpptools (CLI)'
         - Other
     validations:
       required: true

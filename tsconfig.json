@@ -6,6 +6,7 @@
     { "path": "./packages/validator/tsconfig.build.json" },
     { "path": "./packages/simulator/tsconfig.build.json" },
     { "path": "./packages/simulator/tsconfig.browser.json" },
-    { "path": "./packages/simulator/tsconfig.node.json" }
+    { "path": "./packages/simulator/tsconfig.node.json" },
+    { "path": "./packages/cli/tsconfig.build.json" }
   ]
 }

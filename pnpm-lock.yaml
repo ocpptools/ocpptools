@@ -63,6 +63,37 @@ importers:
         specifier: ^4.1.12
         version: 4.1.12(@types/node@26.6.6)(@vitest/coverage-v8@4.1.12)(vite@7.3.7(@types/node@26.6.6)(jiti@2.7.0)(yaml@2.9.1))
 
+  packages/cli:
+    dependencies:
+      '@ocpptools/core':
+        specifier: workspace:^
+        version: link:../core
+      '@ocpptools/schemas':
+        specifier: workspace:^
+        version: link:../schemas
+      '@ocpptools/simulator':
+        specifier: workspace:^
+        version: link:../simulator
+      '@ocpptools/validator':
+        specifier: workspace:^
+        version: link:../validator
+    devDependencies:
+      '@ocpptools/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@size-limit/esbuild':
+        specifier: ^14.3.0
+        version: 14.3.0(size-limit@14.3.0)
+      '@size-limit/file':
+        specifier: ^14.3.0
+        version: 14.3.0(size-limit@14.3.0)
+      '@types/ws':
+        specifier: ^8.18.2
+        version: 8.18.2
+      ws:
+        specifier: ^8.22.1
+        version: 8.22.1
+
   packages/core:
     devDependencies:
       '@ocpptools/tsconfig':
