@@ -256,12 +256,19 @@ results or errors reject. A rejected real chain emits
 without `certificateType` stores the chain for both uses. `callbackTimeoutMs`
 bounds every injected security callback and defaults to 10 seconds. A validator
 is required for `trustStore`, `revocation`, and `allowUnknownRevocation`; an
-incomplete configuration fails at construction. ISO 15118 and firmware
-callbacks are added in their own phases. The engine does not import a crypto
-library and its security state never stores private keys. Outbound certificate
-requests reject private-key material and malformed CSR values. No
-X.509/ASN.1/EXI reference implementation is bundled; consumers provide their
-own validator or service.
+incomplete configuration fails at construction. An `iso15118` codec enables
+`certificates.get15118Message(schemaVersion, action, payload)`: the simulator
+encodes the request, sends `Get15118EVCertificate`, requires an `Accepted`
+response with a valid `exiResponse`, decodes it, and optionally runs
+`validateResponse`. The codec receives `{ schemaVersion, action, payload }` in
+`encodeRequest`, `{ schemaVersion, action, exiResponse }` in `decodeResponse`,
+and `{ schemaVersion, action, response }` in `validateResponse`. Requests and
+responses are limited to 5600 characters and reject PEM private-key material.
+Without a codec, the raw request/response methods remain available and no EXI
+implementation is bundled. Firmware callbacks are added in their own phase. The engine does not import a crypto library and its security
+state never stores private keys. Outbound certificate requests reject
+private-key material and malformed CSR values. No X.509/ASN.1/EXI reference
+implementation is bundled; consumers provide their own validator or service.
 Snapshots do not contain private keys in security state, but `getHistory()`,
 autosave, and snapshots with `includeHistory` can retain raw inbound and
 outbound frames before or after validation. Clear or redact history before

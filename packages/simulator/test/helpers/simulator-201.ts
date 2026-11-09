@@ -13,6 +13,7 @@ export interface ResponderOptions {
 	readonly authorizeStatus?: string | ((count: number) => string);
 	readonly authorizeGroup?: string;
 	readonly failTransactionEvent?: boolean;
+	readonly responses?: Record<string, Record<string, unknown>>;
 }
 
 export interface Harness201Options extends ResponderOptions {
@@ -82,6 +83,7 @@ export function installResponder(transport: FakeTransport, options: ResponderOpt
 			SignCertificate: { status: 'Accepted' },
 			Get15118EVCertificate: { status: 'Accepted', exiResponse: 'exi-response' },
 			GetCertificateStatus: { status: 'Accepted', ocspResult: 'ocsp-response' },
+			...options.responses,
 		};
 		transport.receive(JSON.stringify([3, messageId, responses[action] ?? {}]));
 	};

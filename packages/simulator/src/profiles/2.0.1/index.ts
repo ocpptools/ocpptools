@@ -42,6 +42,7 @@ import {
 	createSecurityHandlers,
 	createSecurityState201,
 	sendGet15118EVCertificate201,
+	sendGet15118EVCertificateMessage201,
 	sendGetCertificateStatus201,
 	sendSecurityEvent201,
 	sendSignCertificate201,
@@ -225,6 +226,11 @@ export interface CertificatesApi201 {
 		action: 'Install' | 'Update',
 		exiRequest: string,
 	): Promise<JsonObject>;
+	get15118Message(
+		schemaVersion: string,
+		action: 'Install' | 'Update',
+		payload: unknown,
+	): Promise<unknown>;
 	getStatus(ocspRequestData: JsonObject): Promise<JsonObject>;
 	sendSecurityEvent(type: string, techInfo?: string): Promise<void>;
 }
@@ -2227,6 +2233,14 @@ export class Simulator201 extends EngineBase<Simulator201State> {
 			signWithProvider: (input) => signWithProvider201(this, this.securityOptions, input),
 			get15118: (schemaVersion, action, exiRequest) =>
 				sendGet15118EVCertificate201(this, schemaVersion, action, exiRequest),
+			get15118Message: (schemaVersion, action, payload) =>
+				sendGet15118EVCertificateMessage201(
+					this,
+					this.securityOptions,
+					schemaVersion,
+					action,
+					payload,
+				),
 			getStatus: (ocspRequestData) => sendGetCertificateStatus201(this, ocspRequestData),
 			sendSecurityEvent: (type, techInfo) => sendSecurityEvent201(this, type, techInfo),
 		};
@@ -2407,6 +2421,20 @@ export class Simulator201 extends EngineBase<Simulator201State> {
 		exiRequest: string,
 	): Promise<JsonObject> {
 		return sendGet15118EVCertificate201(this, iso15118SchemaVersion, action, exiRequest);
+	}
+
+	sendGet15118EVCertificateMessage(
+		iso15118SchemaVersion: string,
+		action: 'Install' | 'Update',
+		payload: unknown,
+	): Promise<unknown> {
+		return sendGet15118EVCertificateMessage201(
+			this,
+			this.securityOptions,
+			iso15118SchemaVersion,
+			action,
+			payload,
+		);
 	}
 
 	sendGetCertificateStatus(ocspRequestData: JsonObject): Promise<JsonObject> {

@@ -64,10 +64,21 @@ export interface CsrProvider201 {
 }
 
 export interface Iso15118Codec201 {
-	schemaVersion: string;
-	encodeRequest(message: unknown): Promise<string>;
-	decodeResponse(exi: string): Promise<unknown>;
-	validateResponse?(response: unknown): Promise<{ valid: boolean; errors: readonly string[] }>;
+	encodeRequest(input: {
+		schemaVersion: string;
+		action: 'Install' | 'Update';
+		payload: unknown;
+	}): Promise<string>;
+	decodeResponse(input: {
+		schemaVersion: string;
+		action: 'Install' | 'Update';
+		exiResponse: string;
+	}): Promise<unknown>;
+	validateResponse?(input: {
+		schemaVersion: string;
+		action: 'Install' | 'Update';
+		response: unknown;
+	}): Promise<{ valid: boolean; errors: readonly string[] }>;
 }
 
 export interface FirmwareVerifier201 {
@@ -104,12 +115,16 @@ export interface SecurityOptions201 {
 	revocation?: RevocationChecker201;
 	/** Accept `unknown` revocation results. `revoked` and malformed results always fail. */
 	allowUnknownRevocation?: boolean;
+	/** Optional ISO 15118/EXI codec for Get15118EVCertificate. */
+	iso15118?: Iso15118Codec201;
 	/** Upper bound for injected security callbacks. Defaults to 10 seconds. */
 	callbackTimeoutMs?: number;
 }
 
 const DEFAULT_SECURITY_CALLBACK_TIMEOUT_MS = 10_000;
 const MAX_SIGN_CERTIFICATE_CSR_LENGTH = 5500;
+const MAX_EXI_LENGTH = 5600;
+const MAX_ISO15118_SCHEMA_VERSION_LENGTH = 50;
 
 export interface SimulatedCertificate201 {
 	certificateType: string;
@@ -500,11 +515,118 @@ export async function sendGet15118EVCertificate201(
 	action: 'Install' | 'Update',
 	exiRequest: string,
 ): Promise<JsonObject> {
+	if (
+		typeof iso15118SchemaVersion !== 'string' ||
+		iso15118SchemaVersion.trim() === '' ||
+		iso15118SchemaVersion.length > MAX_ISO15118_SCHEMA_VERSION_LENGTH ||
+		(action !== 'Install' && action !== 'Update') ||
+		!validExi201(exiRequest)
+	) {
+		throw new SimulatorError(
+			'invalid-options',
+			`iso15118SchemaVersion, action, and a non-empty exiRequest of at most ${String(MAX_EXI_LENGTH)} characters are required`,
+		);
+	}
 	return engine.sendCall('Get15118EVCertificate', {
 		iso15118SchemaVersion,
 		action,
 		exiRequest,
 	});
+}
+
+/** Encodes, sends, decodes and optionally validates a 15118 message through the injected codec. */
+export async function sendGet15118EVCertificateMessage201(
+	engine: EngineBase<Simulator201State>,
+	security: SecurityOptions201 | undefined,
+	iso15118SchemaVersion: string,
+	action: 'Install' | 'Update',
+	payload: unknown,
+): Promise<unknown> {
+	const codec = security?.iso15118;
+	if (codec === undefined) {
+		throw new SimulatorError('unsupported-feature', 'An ISO 15118 codec is not configured');
+	}
+	if (
+		typeof iso15118SchemaVersion !== 'string' ||
+		iso15118SchemaVersion.trim() === '' ||
+		iso15118SchemaVersion.length > MAX_ISO15118_SCHEMA_VERSION_LENGTH ||
+		(action !== 'Install' && action !== 'Update')
+	) {
+		throw new SimulatorError('invalid-options', 'iso15118SchemaVersion and action are invalid');
+	}
+	let exiRequest: unknown;
+	try {
+		exiRequest = await runSecurityCallback201(engine, security, () =>
+			codec.encodeRequest({ schemaVersion: iso15118SchemaVersion, action, payload }),
+		);
+	} catch (error) {
+		throw securityCallbackFailure(error, 'The ISO 15118 encoder failed');
+	}
+	if (!validExi201(exiRequest)) {
+		throw new SimulatorError('callback-error', 'The ISO 15118 encoder returned an invalid request');
+	}
+	const response = await sendGet15118EVCertificate201(
+		engine,
+		iso15118SchemaVersion,
+		action,
+		exiRequest,
+	);
+	if (response['status'] !== 'Accepted') {
+		const statusInfo = response['statusInfo'];
+		const rawReason =
+			isRecordValue(statusInfo) && typeof statusInfo['reasonCode'] === 'string'
+				? statusInfo['reasonCode']
+				: undefined;
+		const reason =
+			rawReason !== undefined && /^[A-Za-z0-9_.:-]{1,50}$/.test(rawReason)
+				? rawReason
+				: 'not accepted';
+		throw new SimulatorError('protocol-error', `Get15118EVCertificate failed: ${reason}`);
+	}
+	const exiResponse = response['exiResponse'];
+	if (!validExi201(exiResponse)) {
+		throw new SimulatorError(
+			'protocol-error',
+			'Get15118EVCertificate returned an invalid exiResponse',
+		);
+	}
+	let decoded: unknown;
+	try {
+		decoded = await runSecurityCallback201(engine, security, () =>
+			codec.decodeResponse({
+				schemaVersion: iso15118SchemaVersion,
+				action,
+				exiResponse,
+			}),
+		);
+	} catch (error) {
+		throw securityCallbackFailure(error, 'The ISO 15118 decoder failed');
+	}
+	if (codec.validateResponse !== undefined) {
+		let validation: unknown;
+		try {
+			validation = await runSecurityCallback201(engine, security, () =>
+				codec.validateResponse!({
+					schemaVersion: iso15118SchemaVersion,
+					action,
+					response: decoded,
+				}),
+			);
+		} catch (error) {
+			throw securityCallbackFailure(error, 'The ISO 15118 validator failed');
+		}
+		if (!isRecordValue(validation) || validation['valid'] !== true) {
+			const errors =
+				isRecordValue(validation) && Array.isArray(validation['errors'])
+					? validation['errors'].filter((entry): entry is string => typeof entry === 'string')
+					: [];
+			throw new SimulatorError(
+				'protocol-error',
+				`The ISO 15118 response is invalid${errors.length === 0 ? '' : `: ${errors.join('; ')}`}`,
+			);
+		}
+	}
+	return decoded;
 }
 
 export async function sendGetCertificateStatus201(
@@ -582,6 +704,20 @@ function containsPrivateKey(value: string): boolean {
 		// Rescan from the label so overlapping delimiters cannot hide a key.
 		from = labelStart;
 	}
+}
+
+function securityCallbackFailure(error: unknown, message: string): Error {
+	if (error instanceof SimulatorError) return error;
+	return new SimulatorError('callback-error', message);
+}
+
+function validExi201(value: unknown): value is string {
+	return (
+		typeof value === 'string' &&
+		value.length > 0 &&
+		value.length <= MAX_EXI_LENGTH &&
+		!containsPrivateKey(value)
+	);
 }
 
 function validCsr201(value: unknown): value is string {
