@@ -84,11 +84,15 @@ resolved. `@ocpptools/kit` remains.
 
 ## Phase 8 — Real cryptography and ISO 15118
 
-Implement ADR 0009 in opt-in phases: real X.509 parsing and chain validation,
-WebCrypto hashing and signatures, injected OCSP/CRL and firmware verification,
-and an injected ISO 15118/EXI codec. The default simulator behavior stays
-simulated until the security review, vector tests, and dependency audit pass.
-No private keys or automatic network fetches enter the engine.
+ADR 0009 is implemented as opt-in callbacks: injected X.509 chain validation,
+revocation, CSR generation, firmware verification, and an injected ISO 15118/EXI
+codec. The default simulator behavior stays simulated. No private keys or
+automatic network fetches enter the engine.
+
+A bundled X.509/ASN.1/EXI reference implementation remains out of scope under
+ADR 0011. It needs a dedicated security phase with full PKIX scope, test
+vectors, dependency audit, and external review. The callback contract and threat
+model are documented in `docs/security/crypto-15118.md` and ADR 0012.
 
 The device-model catalog remains curated and hand-written (ADR 0008). A complete
 catalog needs a named consumer and a new legal review. OCPP 2.1.0 remains
