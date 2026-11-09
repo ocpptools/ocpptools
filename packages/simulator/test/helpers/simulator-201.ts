@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Rodolfo Carrillo
 
-import { Simulator201 } from '../../src/2.0.1.js';
+import { Simulator201, type SecurityOptions201 } from '../../src/2.0.1.js';
 import { FakeClock, flushMicrotasks } from './fake-clock.js';
 import { FakeTransportFactory, type FakeTransport } from './fake-transport.js';
 
@@ -19,6 +19,7 @@ export interface Harness201Options extends ResponderOptions {
 	readonly evseCount?: number;
 	readonly power?: number;
 	readonly boot?: { auto?: boolean; required?: boolean; retryOnPending?: boolean };
+	readonly security?: SecurityOptions201;
 }
 
 export interface Harness201 {
@@ -106,6 +107,7 @@ export function createHarness201(options: Harness201Options = {}): Harness201 {
 			defaultChargingPowerKw: options.power ?? 7.4,
 		},
 		...(options.boot === undefined ? {} : { boot: options.boot }),
+		...(options.security === undefined ? {} : { security: options.security }),
 	});
 	simulator.connect();
 	const transport = factory.transports[0]!;

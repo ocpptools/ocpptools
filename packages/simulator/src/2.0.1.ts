@@ -69,7 +69,21 @@ export type {
 } from './profiles/2.0.1/local-auth.js';
 export type { ChargingProfile201, ChargingProfileState201 } from './profiles/2.0.1/charging.js';
 export type { DisplayMessage201, ServicesState201 } from './profiles/2.0.1/services.js';
-export type { SecurityState201, SimulatedCertificate201 } from './profiles/2.0.1/security.js';
+export type {
+	CertificateHashData201,
+	CertificatePurpose201,
+	CertificateSummary201,
+	CertificateValidationContext201,
+	CertificateValidationResult201,
+	CsrProvider201,
+	FirmwareVerifier201,
+	Iso15118Codec201,
+	RevocationChecker201,
+	SecurityOptions201,
+	SecurityState201,
+	SecurityTrustStore201,
+	SimulatedCertificate201,
+} from './profiles/2.0.1/security.js';
 
 /** The OCPP version of this entrypoint. */
 export const SIMULATOR_PROTOCOL_VERSION = '2.0.1' as const;

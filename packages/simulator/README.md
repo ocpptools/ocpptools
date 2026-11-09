@@ -235,6 +235,21 @@ active instead of stopping it. The device-model catalog is curated, not the
 complete standard catalog (ADR 0008). OCPP 2.1.0 is deferred (ADR 0010). No
 feature claims conformance evidence.
 
+### Security integration
+
+`Simulator201Options.security` is opt-in and has no effect unless it is set. The
+default remains simulated. This first phase supports
+`validateCertificateChain`; `trustStore` is passed to it with the injected
+clock. Additional callbacks (`csrProvider`, revocation, firmware, ISO 15118)
+are added in their own phases. The engine does not import a crypto library and
+its security state never stores private keys. Snapshots do not contain private
+keys in security state, but `getHistory()`, autosave, and snapshots with
+`includeHistory` can retain raw inbound frames before validation. Clear or
+redact history before saving or exporting sensitive material. A validator
+implies `mode: 'real'`; an explicit
+`simulated` mode with a validator is rejected. `real` without a validator also
+fails with `invalid-options`.
+
 ### Transactions
 
 ```ts

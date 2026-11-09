@@ -42,6 +42,237 @@ function ocspData(serialNumber: string): Record<string, unknown> {
 	return { ...hashData(serialNumber), responderURL: 'https://ocsp.example.com' };
 }
 
+describe('Simulator201 real security integration', () => {
+	it('uses an injected certificate validator for install and signed chains', async () => {
+		const calls: Array<{ chain: readonly string[]; purpose: string; now: number }> = [];
+		const hash = {
+			hashAlgorithm: 'SHA256' as const,
+			issuerNameHash: 'issuer-real',
+			issuerKeyHash: 'key-real',
+			serialNumber: '01AB',
+		};
+		const harness = createHarness201({
+			security: {
+				validateCertificateChain: (chain, purpose, context) => {
+					calls.push({ chain, purpose, now: context.now });
+					return Promise.resolve({ valid: true, errors: [], hashData: hash });
+				},
+			},
+		});
+		await harness.ready();
+
+		expect(
+			await call(harness, 'real-1', 'InstallCertificate', {
+				certificateType: 'CSMSRootCertificate',
+				certificate: '-----BEGIN CERTIFICATE-----real-----END CERTIFICATE-----',
+			}),
+		).toEqual({ status: 'Accepted' });
+		expect(harness.simulator.state.security.certificates[0]?.hash).toMatchObject(hash);
+		const chain = '-----BEGIN CERTIFICATE-----signed-----END CERTIFICATE-----';
+		expect(
+			await call(harness, 'real-2', 'CertificateSigned', {
+				certificateChain: chain,
+				certificateType: 'V2GCertificate',
+			}),
+		).toEqual({ status: 'Accepted' });
+		expect(calls).toHaveLength(2);
+		expect(calls[0]).toMatchObject({
+			chain: ['-----BEGIN CERTIFICATE-----real-----END CERTIFICATE-----'],
+			purpose: 'CSMSRootCertificate',
+		});
+		expect(calls[1]).toMatchObject({ chain: [chain], purpose: 'V2GCertificate' });
+		expect(typeof calls[0]?.now).toBe('number');
+	});
+
+	it('rejects invalid certificates and chains in real mode', async () => {
+		const harness = createHarness201({
+			security: {
+				mode: 'real',
+				validateCertificateChain: () =>
+					Promise.resolve({ valid: false, errors: ['invalid chain'] }),
+			},
+		});
+		await harness.ready();
+
+		expect(
+			await call(harness, 'real-bad-1', 'InstallCertificate', {
+				certificateType: 'CSMSRootCertificate',
+				certificate: 'cert',
+			}),
+		).toEqual({ status: 'Rejected' });
+		expect(
+			await call(harness, 'real-bad-2', 'CertificateSigned', {
+				certificateChain: '-----BEGIN CERTIFICATE-----invalid-----END CERTIFICATE-----',
+			}),
+		).toEqual({ status: 'Rejected' });
+		expect(harness.simulator.state.security.certificates).toHaveLength(0);
+		expect(harness.simulator.state.security.signedChains).toEqual({});
+	});
+
+	it('rejects throwing validators and invalid hash data', async () => {
+		const throwing = createHarness201({
+			security: {
+				mode: 'real',
+				validateCertificateChain: () => Promise.reject(new Error('validator failed')),
+			},
+		});
+		await throwing.ready();
+		expect(
+			await call(throwing, 'throw-1', 'InstallCertificate', {
+				certificateType: 'CSMSRootCertificate',
+				certificate: 'cert',
+			}),
+		).toEqual({ status: 'Rejected' });
+		expect(
+			await call(throwing, 'throw-2', 'CertificateSigned', { certificateChain: 'chain' }),
+		).toEqual({ status: 'Rejected' });
+
+		const missingHash = createHarness201({
+			security: {
+				mode: 'real',
+				validateCertificateChain: () => Promise.resolve({ valid: true, errors: [] }),
+			},
+		});
+		await missingHash.ready();
+		expect(
+			await call(missingHash, 'hash-1', 'InstallCertificate', {
+				certificateType: 'CSMSRootCertificate',
+				certificate: 'cert',
+			}),
+		).toEqual({ status: 'Rejected' });
+	});
+
+	it('validates and stores only PEM blocks from a signed chain', async () => {
+		let received: readonly string[] = [];
+		const harness = createHarness201({
+			security: {
+				mode: 'real',
+				validateCertificateChain: (chain) => {
+					received = chain;
+					return Promise.resolve({ valid: true, errors: [] });
+				},
+			},
+		});
+		await harness.ready();
+		const first = '-----BEGIN CERTIFICATE-----a-----END CERTIFICATE-----';
+		const second = '-----BEGIN CERTIFICATE-----b-----END CERTIFICATE-----';
+		expect(
+			await call(harness, 'pem-1', 'CertificateSigned', {
+				certificateChain: `${first}\n${second}`,
+			}),
+		).toEqual({ status: 'Accepted' });
+		expect(received).toEqual([first, second]);
+		expect(harness.simulator.state.security.signedChains['ChargingStationCertificate']).toBe(
+			`${first}\n${second}`,
+		);
+
+		expect(
+			await call(harness, 'pem-2', 'CertificateSigned', {
+				certificateChain: `${first}\n-----BEGIN PRIVATE KEY-----secret-----END PRIVATE KEY-----`,
+			}),
+		).toEqual({ status: 'Rejected' });
+	});
+
+	it('rejects private key blocks in simulated mode', async () => {
+		const harness = createHarness201();
+		await harness.ready();
+		const privateKey =
+			'-----BEGIN PGP PRIVATE KEY BLOCK-----secret-----END PGP PRIVATE KEY BLOCK-----';
+		expect(
+			await call(harness, 'sim-key-1', 'InstallCertificate', {
+				certificateType: 'CSMSRootCertificate',
+				certificate: privateKey,
+			}),
+		).toEqual({ status: 'Rejected' });
+		expect(
+			await call(harness, 'sim-key-2', 'CertificateSigned', {
+				certificateChain: privateKey,
+			}),
+		).toEqual({ status: 'Rejected' });
+		expect(harness.simulator.state.security.certificates).toHaveLength(0);
+		expect(harness.simulator.state.security.signedChains).toEqual({});
+	});
+
+	it('does not call a validator for non-PEM signed chains', async () => {
+		let calls = 0;
+		const harness = createHarness201({
+			security: {
+				mode: 'real',
+				validateCertificateChain: () => {
+					calls += 1;
+					return Promise.resolve({ valid: true, errors: [] });
+				},
+			},
+		});
+		await harness.ready();
+		expect(
+			await call(harness, 'non-pem-1', 'CertificateSigned', {
+				certificateChain: 'not-a-certificate',
+			}),
+		).toEqual({ status: 'Rejected' });
+		expect(calls).toBe(0);
+		expect(harness.simulator.state.security.signedChains).toEqual({});
+	});
+
+	it('rejects snapshots that contain private key material in security state', async () => {
+		const harness = createHarness201();
+		await harness.ready();
+		const snapshot = harness.simulator.exportSnapshot() as unknown as {
+			state: {
+				security: {
+					certificates: Array<Record<string, unknown>>;
+					signedChains: Record<string, string>;
+				};
+			};
+		};
+		snapshot.state.security.certificates.push({
+			certificateType: 'CSMSRootCertificate',
+			certificate: '-----BEGIN PRIVATE KEY-----secret-----END PRIVATE KEY-----',
+			hash: {
+				hashAlgorithm: 'SHA256',
+				issuerNameHash: 'issuer',
+				issuerKeyHash: 'key',
+				serialNumber: '01',
+			},
+			installedAt: 1,
+		});
+		const result = harness.simulator.restoreSnapshot(snapshot);
+		expect(result.restored).toBe(false);
+		expect(result.error?.code).toBe('invalid-snapshot');
+	});
+
+	it('rejects private key material in security event text', async () => {
+		const harness = createHarness201();
+		await harness.ready();
+		await expect(
+			harness.simulator.sendSecurityEvent(
+				'FirmwareUpdated',
+				'-----BEGIN PRIVATE KEY-----secret-----END PRIVATE KEY-----',
+			),
+		).rejects.toThrow('private key');
+		expect(harness.simulator.state.security.events).toHaveLength(0);
+		await harness.simulator.sendSecurityEvent('FirmwareUpdated', 'firmware verified');
+		expect(harness.simulator.state.security.events).toHaveLength(1);
+	});
+
+	it('requires explicit real mode when a validator is present', () => {
+		expect(() =>
+			createHarness201({
+				security: {
+					mode: 'simulated',
+					validateCertificateChain: () => Promise.resolve({ valid: true, errors: [] }),
+				},
+			}),
+		).toThrow('real security mode');
+	});
+
+	it('requires a validator when real mode is selected', () => {
+		expect(() => createHarness201({ security: { mode: 'real' } })).toThrow(
+			'validateCertificateChain',
+		);
+	});
+});
+
 describe('Simulator201 security', () => {
 	it('installs and reports simulated certificates', async () => {
 		const harness = createHarness201();

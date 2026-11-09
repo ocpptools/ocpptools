@@ -25,7 +25,11 @@ not persist private keys, and must not make automatic network requests.
    built-in dependency on a crypto or EXI library.
 2. **WebCrypto first.** Hashing, signature verification, and key handling use
    the injected/global WebCrypto surface available in browsers and Node 22.
-   Private keys and trust-store secrets never enter snapshots or logs.
+   Private keys and trust-store secrets never enter security state. Raw
+   protocol history is diagnostic and may retain inbound frames before
+   validation; snapshots with `includeHistory`, autosave, and `getHistory()`
+   can expose them, so callers must clear or redact history before saving or
+   exporting sensitive material.
 3. **ASN.1/X.509 phase.** Parse PEM/DER chains with a reviewed ASN.1/X.509
    library, validate validity, key usage, EKU, issuer signatures, and trust
    anchors, and compute the OCPP certificate hash data from the DER structures.
@@ -49,4 +53,4 @@ not persist private keys, and must not make automatic network requests.
   change.
 - Full ISO 15118/EXI and third-party certification remain out of scope until a
   separate implementation and review land.
-- No private key material is added to the repository, snapshots, or logs.
+- No private key material is added to the repository or security state. Raw diagnostic history can retain inbound frames; callers must clear or redact it before saving or exporting sensitive material.
