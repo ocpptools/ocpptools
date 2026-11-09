@@ -32,6 +32,10 @@
       "types": "./dist/browser/index.d.ts",
       "import": "./dist/browser/index.js"
     },
+    "./node": {
+      "types": "./dist/node/index.d.ts",
+      "import": "./dist/node/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -40,8 +44,8 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "build": "tsc -b tsconfig.build.json tsconfig.browser.json",
-    "clean": "tsc -b --clean tsconfig.build.json tsconfig.browser.json",
+    "build": "tsc -b tsconfig.build.json tsconfig.browser.json tsconfig.node.json",
+    "clean": "tsc -b --clean tsconfig.build.json tsconfig.browser.json tsconfig.node.json",
     "typecheck:test": "tsc --noEmit -p tsconfig.json",
     "lint:package": "publint && attw --pack . --profile esm-only",
     "prepack": "node ../../scripts/sync-license.mjs copy",
@@ -51,7 +55,9 @@
     "@ocpptools/core": "workspace:^"
   },
   "devDependencies": {
-    "@ocpptools/tsconfig": "workspace:*"
+    "@ocpptools/tsconfig": "workspace:*",
+    "@types/ws": "^8.18.2",
+    "ws": "^8.22.1"
   },
   "publishConfig": {
     "access": "public"

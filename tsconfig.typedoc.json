@@ -5,7 +5,7 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "composite": false,
     "incremental": false,
-    "types": []
+    "types": ["node"]
   },
   "include": [
     "packages/core/src/**/*.ts",

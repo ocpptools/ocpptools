@@ -14,7 +14,8 @@
       "@ocpptools/simulator": ["./src/index.ts"],
       "@ocpptools/simulator/1.6": ["./src/1.6.ts"],
       "@ocpptools/simulator/2.0.1": ["./src/2.0.1.ts"],
-      "@ocpptools/simulator/browser": ["./src/browser/index.ts"]
+      "@ocpptools/simulator/browser": ["./src/browser/index.ts"],
+      "@ocpptools/simulator/node": ["./src/node/index.ts"]
     }
   },
   "include": ["src/**/*.ts", "test/**/*.ts"],

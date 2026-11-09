@@ -18,6 +18,9 @@ export default defineConfig({
 			'@ocpptools/simulator/browser': fileURLToPath(
 				new URL('packages/simulator/src/browser/index.ts', import.meta.url),
 			),
+			'@ocpptools/simulator/node': fileURLToPath(
+				new URL('packages/simulator/src/node/index.ts', import.meta.url),
+			),
 			'@ocpptools/simulator/1.6': fileURLToPath(
 				new URL('packages/simulator/src/1.6.ts', import.meta.url),
 			),
