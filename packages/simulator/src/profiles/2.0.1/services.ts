@@ -6,6 +6,13 @@ import type { JsonObject } from '@ocpptools/core';
 import type { EngineBase } from '../../engine.js';
 import type { CallContext } from '../../rpc.js';
 import { SimulatorError, isAlreadyCountedError } from '../../errors.js';
+import {
+	checkRevocation201,
+	containsPrivateKeyMaterial,
+	runSecurityCallback201,
+	sendSecurityEvent201,
+	type SecurityOptions201,
+} from './security.js';
 import type { Simulator201State } from './index.js';
 
 export interface DisplayMessage201 {
@@ -21,6 +28,13 @@ export interface ServicesState201 {
 		requestId?: number;
 		publishStatus?: string;
 		publish?: { location: string; checksum: string; requestId: number };
+		update?: {
+			location: string;
+			retrieveDateTime: string;
+			installDateTime?: string;
+			signature: string;
+			signingCertificate: string;
+		};
 	};
 	log: { requestId?: number; status?: string };
 }
@@ -37,9 +51,50 @@ export function createServicesState201(): ServicesState201 {
 
 const firmwareTimers = new WeakMap<object, Array<() => void>>();
 const logTimers = new WeakMap<object, Array<() => void>>();
+const firmwareGenerations = new WeakMap<object, number>();
+const MAX_TIMER_DELAY_MS = 2_147_000_000;
+
+function scheduleAt(
+	engine: EngineBase<Simulator201State>,
+	timers: Array<() => void>,
+	targetMs: number,
+	callback: () => void,
+): void {
+	const delay = Math.max(0, targetMs - Date.parse(engine.ocppNow()));
+	if (delay > MAX_TIMER_DELAY_MS) {
+		timers.push(
+			engine.scheduler.setTimeout(
+				() => scheduleAt(engine, timers, targetMs, callback),
+				MAX_TIMER_DELAY_MS,
+			),
+		);
+		return;
+	}
+	timers.push(engine.scheduler.setTimeout(callback, delay));
+}
+
+function nextFirmwareGeneration(engine: EngineBase<Simulator201State>): number {
+	const next = (firmwareGenerations.get(engine) ?? 0) + 1;
+	firmwareGenerations.set(engine, next);
+	return next;
+}
+
+function isCurrentFirmwareGeneration(
+	engine: EngineBase<Simulator201State>,
+	generation: number,
+): boolean {
+	return (firmwareGenerations.get(engine) ?? 0) === generation;
+}
+
+/** Cancels firmware timers and invalidates any in-flight verification. */
+export function cancelFirmwareTimers201(engine: EngineBase<Simulator201State>): void {
+	cancelTimers(firmwareTimers, engine);
+	nextFirmwareGeneration(engine);
+}
 
 export function createServicesHandlers(
 	engine: EngineBase<Simulator201State>,
+	security?: SecurityOptions201,
 ): Record<string, (context: CallContext) => void | Promise<void>> {
 	return {
 		SetDisplayMessage: async (context) => {
@@ -173,25 +228,93 @@ export function createServicesHandlers(
 				return;
 			}
 			const retrieveMs = Date.parse(firmware['retrieveDateTime']);
+			const location = stringValue(firmware['location'], '');
+			const installDateTime = firmware['installDateTime'];
 			const installMs =
-				typeof firmware['installDateTime'] === 'string'
-					? Date.parse(firmware['installDateTime'])
-					: undefined;
+				typeof installDateTime === 'string' ? Date.parse(installDateTime) : undefined;
+			if (
+				location.trim() === '' ||
+				location.length > 512 ||
+				containsPrivateKeyMaterial(location) ||
+				(installDateTime !== undefined &&
+					(typeof installDateTime !== 'string' ||
+						!Number.isFinite(installMs) ||
+						containsPrivateKeyMaterial(installDateTime)))
+			) {
+				await context.fail('FormatViolation', 'UpdateFirmware metadata is invalid');
+				return;
+			}
 			if (!Number.isFinite(retrieveMs)) {
 				await context.reply({ status: 'Rejected' });
 				return;
 			}
+			if (security?.mode === 'real' && security.firmwareVerifier === undefined) {
+				await context.reply({ status: 'Rejected' });
+				return;
+			}
+			if (engine.state.services.firmware.requestId === requestId) {
+				await context.reply({
+					status: 'Rejected',
+					statusInfo: { reasonCode: 'DuplicateRequestId' },
+				});
+				return;
+			}
+			const entryGeneration = firmwareGenerations.get(engine) ?? 0;
+			let verifiedUpdate:
+				| {
+						signature: string;
+						signingCertificate: string;
+						metadata: JsonObject;
+				  }
+				| undefined;
+			if (security?.firmwareVerifier !== undefined || security?.mode === 'real') {
+				const checked = await validateFirmwareRequest201(engine, security, firmware);
+				if (!isCurrentFirmwareGeneration(engine, entryGeneration)) {
+					await context.reply({
+						status: 'Rejected',
+						statusInfo: { reasonCode: 'Superseded' },
+					});
+					return;
+				}
+				if (!checked.ok) {
+					await context.reply({ status: checked.status });
+					if (checked.event !== undefined) {
+						void sendSecurityEvent201(engine, checked.event).catch((error: unknown) =>
+							reportServiceError(engine, error),
+						);
+					}
+					return;
+				}
+				verifiedUpdate = checked;
+			}
+			if (!isCurrentFirmwareGeneration(engine, entryGeneration)) {
+				await context.reply({ status: 'Rejected', statusInfo: { reasonCode: 'Superseded' } });
+				return;
+			}
+			const generation = nextFirmwareGeneration(engine);
 			const previous = engine.state.services.firmware.status;
 			const active =
 				previous === 'DownloadScheduled' ||
 				previous === 'Downloading' ||
 				previous === 'Downloaded' ||
+				previous === 'SignatureVerified' ||
 				previous === 'InstallScheduled' ||
 				previous === 'Installing';
 			cancelTimers(firmwareTimers, engine);
 			const now = Date.parse(engine.ocppNow());
 			const delay = Math.max(0, retrieveMs - now);
 			const state = engine.state.services.firmware;
+			if (verifiedUpdate !== undefined) {
+				state.update = {
+					location: stringValue(verifiedUpdate.metadata['location'], ''),
+					retrieveDateTime: stringValue(verifiedUpdate.metadata['retrieveDateTime'], ''),
+					...(typeof verifiedUpdate.metadata['installDateTime'] === 'string'
+						? { installDateTime: verifiedUpdate.metadata['installDateTime'] }
+						: {}),
+					signature: verifiedUpdate.signature,
+					signingCertificate: verifiedUpdate.signingCertificate,
+				};
+			}
 			state.status = delay > 0 ? 'DownloadScheduled' : 'Downloading';
 			state.requestId = requestId;
 			await context.reply({ status: active ? 'AcceptedCanceled' : 'Accepted' });
@@ -202,18 +325,22 @@ export function createServicesHandlers(
 				);
 			};
 			notify(delay > 0 ? 'DownloadScheduled' : 'Downloading');
-			timers.push(
-				engine.scheduler.setTimeout(
-					() => {
-						if (delay > 0) {
-							state.status = 'Downloading';
-							notify('Downloading');
-						}
-						firmwareAfterDownload(engine, requestId, installMs, timers, notify);
-					},
-					delay > 0 ? delay : 1,
-				),
-			);
+			scheduleAt(engine, timers, retrieveMs, () => {
+				if (!isCurrentFirmwareGeneration(engine, generation)) return;
+				if (delay > 0) {
+					state.status = 'Downloading';
+					notify('Downloading');
+				}
+				void firmwareAfterDownload(
+					engine,
+					security,
+					generation,
+					requestId,
+					installMs,
+					timers,
+					notify,
+				).catch((error: unknown) => reportServiceError(engine, error));
+			});
 		},
 		PublishFirmware: async (context) => {
 			const location = context.payload['location'];
@@ -384,33 +511,202 @@ function cancelTimers(
 	bucket.length = 0;
 }
 
-function firmwareAfterDownload(
+type FirmwareRequestResult =
+	| {
+			readonly ok: true;
+			readonly signature: string;
+			readonly signingCertificate: string;
+			readonly metadata: JsonObject;
+	  }
+	| { readonly ok: false; readonly status: string; readonly event?: string };
+
+async function validateFirmwareRequest201(
 	engine: EngineBase<Simulator201State>,
+	security: SecurityOptions201 | undefined,
+	firmware: Record<string, unknown>,
+): Promise<FirmwareRequestResult> {
+	const signature = firmware['signature'];
+	const signingCertificate = firmware['signingCertificate'];
+	if (
+		typeof signingCertificate !== 'string' ||
+		signingCertificate === '' ||
+		signingCertificate.length > 5500 ||
+		containsPrivateKeyMaterial(signingCertificate)
+	) {
+		return { ok: false, status: 'InvalidCertificate', event: 'InvalidFirmwareSigningCertificate' };
+	}
+	if (
+		typeof signature !== 'string' ||
+		signature === '' ||
+		signature.length > 800 ||
+		containsPrivateKeyMaterial(signature)
+	) {
+		return { ok: false, status: 'Rejected' };
+	}
+	const metadata: JsonObject = {
+		location: stringValue(firmware['location'], ''),
+		retrieveDateTime: stringValue(firmware['retrieveDateTime'], ''),
+		...(typeof firmware['installDateTime'] === 'string'
+			? { installDateTime: firmware['installDateTime'] }
+			: {}),
+	};
+	if (security?.validateCertificateChain !== undefined) {
+		const validator = security.validateCertificateChain;
+		let validation: unknown;
+		try {
+			validation = await runSecurityCallback201(engine, security, () =>
+				validator([signingCertificate], 'ManufacturerRootCertificate', {
+					now: engine.now(),
+					...(security.trustStore === undefined ? {} : { trustStore: security.trustStore }),
+				}),
+			);
+		} catch {
+			return {
+				ok: false,
+				status: 'InvalidCertificate',
+				event: 'InvalidFirmwareSigningCertificate',
+			};
+		}
+		if (!objectValue(validation)) {
+			return {
+				ok: false,
+				status: 'InvalidCertificate',
+				event: 'InvalidFirmwareSigningCertificate',
+			};
+		}
+		const record = objectValue(validation)!;
+		if (record['valid'] !== true) {
+			return {
+				ok: false,
+				status: 'InvalidCertificate',
+				event: 'InvalidFirmwareSigningCertificate',
+			};
+		}
+	}
+	if (security?.revocation !== undefined) {
+		const status = await checkRevocation201(
+			engine,
+			security,
+			[signingCertificate],
+			'ManufacturerRootCertificate',
+		);
+		if (status === 'revoked') {
+			return {
+				ok: false,
+				status: 'RevokedCertificate',
+				event: 'InvalidFirmwareSigningCertificate',
+			};
+		}
+		if (
+			status === 'invalid' ||
+			(status === 'unknown' && security.allowUnknownRevocation !== true)
+		) {
+			return {
+				ok: false,
+				status: 'InvalidCertificate',
+				event: 'InvalidFirmwareSigningCertificate',
+			};
+		}
+	}
+	return { ok: true, signature, signingCertificate, metadata };
+}
+
+async function firmwareAfterDownload(
+	engine: EngineBase<Simulator201State>,
+	security: SecurityOptions201 | undefined,
+	generation: number,
 	requestId: number,
 	installMs: number | undefined,
 	timers: Array<() => void>,
 	notify: (status: string) => void,
-): void {
+): Promise<void> {
 	const state = engine.state.services.firmware;
+	if (!isCurrentFirmwareGeneration(engine, generation) || state.requestId !== requestId) return;
 	state.status = 'Downloaded';
 	notify('Downloaded');
-	const now = Date.parse(engine.ocppNow());
-	const installDelay =
-		installMs !== undefined && Number.isFinite(installMs) ? Math.max(0, installMs - now) : 500;
+	const verifier = security?.firmwareVerifier;
+	const update = state.update;
+	if (verifier !== undefined) {
+		if (update === undefined) {
+			state.status = 'InstallVerificationFailed';
+			delete state.update;
+			notify('InstallVerificationFailed');
+			void sendSecurityEvent201(engine, 'InvalidFirmwareSignature').catch((error: unknown) =>
+				reportServiceError(engine, error),
+			);
+			return;
+		}
+		let verification: unknown;
+		try {
+			verification = await runSecurityCallback201(engine, security, () =>
+				verifier.verify({
+					firmware: {
+						location: update.location,
+						retrieveDateTime: update.retrieveDateTime,
+						...(update.installDateTime === undefined
+							? {}
+							: { installDateTime: update.installDateTime }),
+					},
+					signature: update.signature,
+					signingCertificate: update.signingCertificate,
+					...(security?.trustStore === undefined ? {} : { trustStore: security.trustStore }),
+					now: engine.now(),
+				}),
+			);
+		} catch {
+			verification = undefined;
+		}
+		if (!isCurrentFirmwareGeneration(engine, generation) || state.requestId !== requestId) return;
+		const verificationRecord = objectValue(verification);
+		if (verificationRecord === undefined || verificationRecord['valid'] !== true) {
+			const reason =
+				verificationRecord !== undefined && typeof verificationRecord['reason'] === 'string'
+					? verificationRecord['reason']
+					: 'internal';
+			const status =
+				reason === 'invalid-signature' ? 'InvalidSignature' : 'InstallVerificationFailed';
+			const event =
+				reason === 'invalid-certificate' || reason === 'revoked'
+					? 'InvalidFirmwareSigningCertificate'
+					: 'InvalidFirmwareSignature';
+			state.status = status;
+			delete state.update;
+			notify(status);
+			void sendSecurityEvent201(engine, event).catch((error: unknown) =>
+				reportServiceError(engine, error),
+			);
+			return;
+		}
+		state.status = 'SignatureVerified';
+		notify('SignatureVerified');
+	}
+	if (!isCurrentFirmwareGeneration(engine, generation) || state.requestId !== requestId) return;
 	state.status = 'InstallScheduled';
 	notify('InstallScheduled');
-	timers.push(
-		engine.scheduler.setTimeout(() => {
-			state.status = 'Installing';
-			notify('Installing');
-			timers.push(
-				engine.scheduler.setTimeout(() => {
-					state.status = 'Installed';
-					notify('Installed');
-				}, 500),
-			);
-		}, installDelay),
-	);
+	const startInstall = (): void => {
+		if (!isCurrentFirmwareGeneration(engine, generation) || state.requestId !== requestId) return;
+		state.status = 'Installing';
+		notify('Installing');
+		timers.push(
+			engine.scheduler.setTimeout(() => {
+				if (!isCurrentFirmwareGeneration(engine, generation) || state.requestId !== requestId)
+					return;
+				state.status = 'Installed';
+				delete state.update;
+				notify('Installed');
+				if (security?.firmwareVerifier !== undefined) {
+					void sendSecurityEvent201(engine, 'FirmwareUpdated').catch((error: unknown) =>
+						reportServiceError(engine, error),
+					);
+				}
+			}, 500),
+		);
+	};
+	if (installMs !== undefined && Number.isFinite(installMs)) {
+		scheduleAt(engine, timers, installMs, startInstall);
+	} else {
+		timers.push(engine.scheduler.setTimeout(startInstall, 500));
+	}
 }
 
 function validMessage(message: Record<string, unknown>): boolean {
@@ -442,6 +738,10 @@ function objectValue(value: unknown): Record<string, unknown> | undefined {
 	return typeof value === 'object' && value !== null && !Array.isArray(value)
 		? (value as Record<string, unknown>)
 		: undefined;
+}
+
+function stringValue(value: unknown, fallback: string): string {
+	return typeof value === 'string' ? value : fallback;
 }
 
 function integerValue(value: unknown): number | undefined {
