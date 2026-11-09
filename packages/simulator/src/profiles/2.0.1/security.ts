@@ -369,7 +369,18 @@ function hasNonPemContent(value: string): boolean {
 }
 
 function containsPrivateKey(value: string): boolean {
-	return /-----BEGIN [^-]*PRIVATE KEY[^-]*-----/.test(value);
+	const begin = '-----BEGIN ';
+	const end = '-----';
+	let from = 0;
+	for (;;) {
+		const start = value.indexOf(begin, from);
+		if (start === -1) return false;
+		const labelStart = start + begin.length;
+		const labelEnd = value.indexOf(end, labelStart);
+		if (labelEnd === -1) return false;
+		if (value.slice(labelStart, labelEnd).includes('PRIVATE KEY')) return true;
+		from = labelEnd + end.length;
+	}
 }
 
 /** True when a string contains a PEM private-key block. */
