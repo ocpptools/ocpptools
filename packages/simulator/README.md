@@ -221,15 +221,19 @@ are handled:
 - 39 CSMS-to-charge-point actions, plus the bidirectional `DataTransfer`
   handler.
 
-The advanced features use simulated state. Certificates are in-memory records
-without ASN.1 parsing, WebCrypto, or real 15118 exchanges. Firmware and logs are
-state machines, not real flashing or uploads. Monitoring thresholds and
-composite schedules are calculated from stored state. Periodic and clock-aligned
-monitors run on the injected scheduler and emit `NotifyEvent` records. Display
-messages honor their start and end dates. Station-level `Reset` stops
-transactions and reboots the transport; EVSE-scoped resets stop only that EVSE. `UnlockConnector` follows the specification and returns
-`OngoingAuthorizedTransaction` while a transaction is active instead of stopping
-it. No feature claims conformance evidence.
+The advanced features use simulated state by default. Certificates are in-memory
+records without ASN.1 parsing, WebCrypto, or real 15118 exchanges; real
+X.509/revocation and ISO 15118 adapters are an opt-in phase under ADR 0009 and
+are not shipped as defaults yet. Firmware and logs are state machines, not real
+flashing or uploads. Monitoring thresholds and composite schedules are calculated
+from stored state. Periodic and clock-aligned monitors run on the injected
+scheduler and emit `NotifyEvent` records. Display messages honor their start and
+end dates. Station-level `Reset` stops transactions and reboots the transport;
+EVSE-scoped resets stop only that EVSE. `UnlockConnector` follows the
+specification and returns `OngoingAuthorizedTransaction` while a transaction is
+active instead of stopping it. The device-model catalog is curated, not the
+complete standard catalog (ADR 0008). OCPP 2.1.0 is deferred (ADR 0010). No
+feature claims conformance evidence.
 
 ### Transactions
 
@@ -392,7 +396,10 @@ are never merged.
   sets the URL and subprotocol, so custom headers and mutual TLS require a
   wrapper or subclass that captures the `ws` options you need and is passed as
   the injected constructor.
-- No real cryptography, 15118 stack, firmware flashing, or log upload.
+- Real cryptography and 15118 are approved as an opt-in phase (ADR 0009) but
+  are not shipped yet. No firmware flashing or log upload.
+- The device-model catalog is curated (ADR 0008), and OCPP 2.1.0 is deferred
+  (ADR 0010).
 - No hardware model or physical connector tree.
 - The browser and Node adapters use the injected `WebSocket`; they do not retry
   by themselves. Reconnection belongs to the engine.

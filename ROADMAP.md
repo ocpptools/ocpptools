@@ -78,9 +78,23 @@ placeholder.
 
 Status: the Node adapter and the `ocpptools` CLI are implemented and tested.
 The CLI validates frames with `@ocpptools/validator` and runs simulator
-scenarios against a CSMS. `@ocpptools/kit` remains.
+scenarios against a CSMS. Its first npm publish is pending permission for the
+unscoped `ocpptools` name; the package stays in the workspace until that is
+resolved. `@ocpptools/kit` remains.
 
-## Phase 8 — Launch
+## Phase 8 — Real cryptography and ISO 15118
+
+Implement ADR 0009 in opt-in phases: real X.509 parsing and chain validation,
+WebCrypto hashing and signatures, injected OCSP/CRL and firmware verification,
+and an injected ISO 15118/EXI codec. The default simulator behavior stays
+simulated until the security review, vector tests, and dependency audit pass.
+No private keys or automatic network fetches enter the engine.
+
+The device-model catalog remains curated and hand-written (ADR 0008). A complete
+catalog needs a named consumer and a new legal review. OCPP 2.1.0 remains
+deferred (ADR 0010) and is not part of this phase.
+
+## Phase 9 — Launch
 
 Finish package READMEs, API documentation, examples, changelogs, release
 process, and OpenSSF posture. Launch only after the private website consumes
