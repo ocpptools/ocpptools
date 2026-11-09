@@ -1,5 +1,19 @@
 # ocpptools
 
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies [3ac442a]
+- Updated dependencies [055a0ab]
+- Updated dependencies [84e0b7a]
+- Updated dependencies [c1c60c2]
+- Updated dependencies [3f8e2b1]
+- Updated dependencies [f50c767]
+  - @ocpptools/simulator@0.4.0
+  - @ocpptools/core@0.3.0
+  - @ocpptools/validator@0.3.0
+
 ## 0.1.0
 
 ### Minor Changes

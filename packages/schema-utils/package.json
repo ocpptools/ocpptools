@@ -1,6 +1,6 @@
 {
   "name": "@ocpptools/schema-utils",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Pure JSON Schema utilities: draft normalization, $ref resolution, field metadata, and payload defaults.",
   "license": "Apache-2.0",

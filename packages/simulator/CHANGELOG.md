@@ -1,5 +1,55 @@
 # @ocpptools/simulator
 
+## 0.4.0
+
+### Minor Changes
+
+- 84e0b7a: Extend the opt-in 2.0.1 security integration with a CSR provider and
+  revocation checks. `certificates.signWithProvider` generates a CSR without
+  leaking private keys, `revocation` validates a real `CertificateSigned` chain
+  with an explicit unknown-result policy, and `callbackTimeoutMs` bounds every
+  injected security callback. Raw certificate requests now reject private-key
+  material and malformed CSRs before sending. A signed chain without
+  `certificateType` is stored for both uses, and a rejected real chain emits
+  `InvalidChargingStationCertificate`.
+- c1c60c2: Add an opt-in ISO 15118/EXI codec to the 2.0.1 security integration.
+  `certificates.get15118Message` encodes the request, requires an accepted
+  `Get15118EVCertificate` response, validates the EXI length, decodes it, and
+  optionally runs the codec's response validator. No EXI implementation is
+  bundled, and the engine still makes no network requests. The exported
+  `Iso15118Codec201` now uses input objects (`{ schemaVersion, action, payload }`,
+  `{ schemaVersion, action, exiResponse }`, and `{ schemaVersion, action, response }`)
+  instead of positional arguments. Raw 15118 requests are length-checked and
+  reject private-key material.
+- 3f8e2b1: Add opt-in firmware verification to the 2.0.1 security integration. With a
+  `firmwareVerifier`, `UpdateFirmware` validates the request metadata, checks the
+  signing certificate when a validator is configured, optionally revocation-checks
+  it, and verifies the simulated download afterwards (`SignatureVerified`,
+  `InvalidSignature` or `InstallVerificationFailed`). Invalid signing certificates
+  return `InvalidCertificate` or `RevokedCertificate`. The verifier owns any image
+  download, and the engine still never flashes hardware. Snapshot restore rejects
+  invalid firmware signature metadata.
+- f50c767: Add `SecurityOptions201` to the 2.0.1 simulator. Consumers can opt into real
+  certificate validation by injecting `validateCertificateChain`, or keep the
+  default simulated behavior. The engine stays free of crypto dependencies; its
+  security state never stores private keys. Snapshots with `includeHistory` can
+  retain raw inbound frames in diagnostic history, so callers must redact history
+  before saving or exporting sensitive material.
+
+### Patch Changes
+
+- 3ac442a: Make the curated 2.0.1 device-model catalog explicit and enforceable. The four
+  hand-written variables are frozen in code, and `GetVariables`, `SetVariables`,
+  monitoring, reports, and `deviceModel.variables()` ignore variables added
+  outside it. A test fails if the simulator source statically imports OCA schemas,
+  ships a JSON catalog, or the catalog changes without an explicit update.
+- 055a0ab: Reject unsupported OCPP versions explicitly. Core adds `isOcppVersion` and an
+  `unsupported-version` inspection issue; the validator refuses OCPP 2.1.0 before
+  loading schemas; the simulator rejects a 2.1.0 snapshot protocol with a clear
+  error. OCPP 2.1.0 remains unimplemented.
+- Updated dependencies [055a0ab]
+  - @ocpptools/core@0.3.0
+
 ## 0.3.0
 
 ### Minor Changes
