@@ -222,9 +222,10 @@ are handled:
   handler.
 
 The advanced features use simulated state by default. Certificates are in-memory
-records without ASN.1 parsing, WebCrypto, or real 15118 exchanges; real
-X.509/revocation and ISO 15118 adapters are an opt-in phase under ADR 0009 and
-are not shipped as defaults yet. Firmware and logs are state machines, not real
+records without ASN.1 parsing or WebCrypto. Real certificate validation,
+revocation, CSR generation, firmware verification, and ISO 15118/EXI are
+opt-in callbacks under ADR 0009, ADR 0011, and ADR 0012; no crypto or EXI
+implementation is bundled. Firmware and logs are state machines, not real
 flashing or uploads. Monitoring thresholds and composite schedules are calculated
 from stored state. Periodic and clock-aligned monitors run on the injected
 scheduler and emit `NotifyEvent` records. Display messages honor their start and
@@ -283,9 +284,10 @@ Snapshots do not contain private keys in security state, but `getHistory()`,
 autosave, and snapshots with `includeHistory` can retain raw inbound and
 outbound frames before or after validation. Clear or redact history before
 saving or exporting sensitive material. A validator implies `mode: 'real'`; an
-explicit
-`simulated` mode with a validator is rejected. `real` without a validator also
-fails with `invalid-options`.
+explicit `simulated` mode with a validator is rejected. `real` without a
+validator also fails with `invalid-options`. See
+[docs/security/crypto-15118.md](../../docs/security/crypto-15118.md) for the
+threat model and the full callback contract.
 
 ### Transactions
 
@@ -448,8 +450,9 @@ are never merged.
   sets the URL and subprotocol, so custom headers and mutual TLS require a
   wrapper or subclass that captures the `ws` options you need and is passed as
   the injected constructor.
-- Real cryptography and 15118 are approved as an opt-in phase (ADR 0009) but
-  are not shipped yet. No firmware flashing or log upload.
+- Real cryptography and 15118 ship as opt-in callbacks in 0.4.0 (ADR 0009,
+  ADR 0011, ADR 0012). No X.509, ASN.1, EXI, OCSP or CRL parser is bundled, and
+  there is no firmware flashing or log upload.
 - The device-model catalog is curated to four variables (ADR 0008), and OCPP
   2.1.0 is deferred (ADR 0010). Protocol actions and reports ignore variables
   outside the catalog.
