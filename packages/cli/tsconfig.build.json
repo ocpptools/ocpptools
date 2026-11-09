@@ -1,0 +1,16 @@
+{
+  "extends": "@ocpptools/tsconfig/node.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "../../.cache/tsconfig/cli.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["test", "dist", "coverage"],
+  "references": [
+    { "path": "../core/tsconfig.build.json" },
+    { "path": "../validator/tsconfig.build.json" },
+    { "path": "../simulator/tsconfig.build.json" },
+    { "path": "../simulator/tsconfig.node.json" }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "extends": "@ocpptools/tsconfig/node.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "incremental": false,
+    "types": ["node"],
+    "paths": {
+      "@ocpptools/core": ["../core/src/index.ts"],
+      "@ocpptools/schema-utils": ["../schema-utils/src/index.ts"],
+      "@ocpptools/validator": ["../validator/src/index.ts"],
+      "@ocpptools/simulator": ["../simulator/src/index.ts"],
+      "@ocpptools/simulator/1.6": ["../simulator/src/1.6.ts"],
+      "@ocpptools/simulator/2.0.1": ["../simulator/src/2.0.1.ts"],
+      "@ocpptools/simulator/node": ["../simulator/src/node/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "exclude": ["dist", "coverage"]
+}

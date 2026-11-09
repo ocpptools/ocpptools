@@ -14,6 +14,9 @@ export default defineConfig({
 			'@ocpptools/schema-utils': fileURLToPath(
 				new URL('packages/schema-utils/src/index.ts', import.meta.url),
 			),
+			'@ocpptools/validator': fileURLToPath(
+				new URL('packages/validator/src/index.ts', import.meta.url),
+			),
 			// Subpaths go before the package root: Vite matches aliases by prefix.
 			'@ocpptools/simulator/browser': fileURLToPath(
 				new URL('packages/simulator/src/browser/index.ts', import.meta.url),
