@@ -82,6 +82,8 @@ export type {
 	SecurityOptions201,
 	SecurityState201,
 	SecurityTrustStore201,
+	SignWithProviderInput201,
+	SignWithProviderResult201,
 	SimulatedCertificate201,
 } from './profiles/2.0.1/security.js';
 

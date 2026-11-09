@@ -45,8 +45,11 @@ import {
 	sendGetCertificateStatus201,
 	sendSecurityEvent201,
 	sendSignCertificate201,
+	signWithProvider201,
 	type SecurityOptions201,
 	type SecurityState201,
+	type SignWithProviderInput201,
+	type SignWithProviderResult201,
 	type SimulatedCertificate201,
 } from './security.js';
 import {
@@ -216,6 +219,7 @@ export interface DisplayApi201 {
 export interface CertificatesApi201 {
 	list(): SimulatedCertificate201[];
 	sign(csr: string, type?: 'ChargingStationCertificate' | 'V2GCertificate'): Promise<JsonObject>;
+	signWithProvider(input: SignWithProviderInput201): Promise<SignWithProviderResult201>;
 	get15118(
 		schemaVersion: string,
 		action: 'Install' | 'Update',
@@ -289,6 +293,27 @@ export function createSimulator201Profile(
 			'invalid-options',
 			'A certificate validator requires real security mode',
 		);
+	}
+	if (security?.revocation !== undefined && security.validateCertificateChain === undefined) {
+		throw new SimulatorError(
+			'invalid-options',
+			'Revocation checking requires validateCertificateChain',
+		);
+	}
+	if (security?.trustStore !== undefined && security.validateCertificateChain === undefined) {
+		throw new SimulatorError('invalid-options', 'trustStore requires validateCertificateChain');
+	}
+	if (security?.allowUnknownRevocation === true && security.revocation === undefined) {
+		throw new SimulatorError(
+			'invalid-options',
+			'allowUnknownRevocation requires a revocation checker',
+		);
+	}
+	if (
+		security?.callbackTimeoutMs !== undefined &&
+		(!Number.isFinite(security.callbackTimeoutMs) || security.callbackTimeoutMs <= 0)
+	) {
+		throw new SimulatorError('invalid-options', 'callbackTimeoutMs must be a positive number');
 	}
 	const effectiveSecurity =
 		security === undefined ? undefined : { ...security, mode: securityMode };
@@ -784,6 +809,13 @@ function restoreServices201(value: unknown): Simulator201State['services'] {
 	};
 }
 
+function securityText(value: unknown, path: string): string {
+	if (typeof value !== 'string' || containsPrivateKeyMaterial(value)) {
+		invalid201(`${path} is invalid`);
+	}
+	return value;
+}
+
 function restoreSecurity201(value: unknown): Simulator201State['security'] {
 	if (!isRecord(value)) invalid201('security is invalid');
 	const certificates = value['certificates'];
@@ -791,7 +823,6 @@ function restoreSecurity201(value: unknown): Simulator201State['security'] {
 	const restoredCertificates = certificates.map((entry, index) => {
 		if (
 			!isRecord(entry) ||
-			typeof entry['certificateType'] !== 'string' ||
 			!isRecord(entry['hash']) ||
 			typeof entry['certificate'] !== 'string' ||
 			containsPrivateKeyMaterial(entry['certificate']) ||
@@ -799,9 +830,29 @@ function restoreSecurity201(value: unknown): Simulator201State['security'] {
 		) {
 			invalid201(`security.certificates[${index}] is invalid`);
 		}
+		const hash = entry['hash'];
+		if (!isRecord(hash)) invalid201(`security.certificates[${index}] is invalid`);
+		const hashAlgorithm = securityText(
+			hash['hashAlgorithm'],
+			`security.certificates[${index}].hash`,
+		);
+		if (hashAlgorithm !== 'SHA256' && hashAlgorithm !== 'SHA384' && hashAlgorithm !== 'SHA512') {
+			invalid201(`security.certificates[${index}].hash is invalid`);
+		}
 		return {
-			certificateType: entry['certificateType'],
-			hash: { ...entry['hash'] } as JsonObject,
+			certificateType: securityText(
+				entry['certificateType'],
+				`security.certificates[${index}].certificateType`,
+			),
+			hash: {
+				hashAlgorithm,
+				issuerNameHash: securityText(
+					hash['issuerNameHash'],
+					`security.certificates[${index}].hash`,
+				),
+				issuerKeyHash: securityText(hash['issuerKeyHash'], `security.certificates[${index}].hash`),
+				serialNumber: securityText(hash['serialNumber'], `security.certificates[${index}].hash`),
+			},
 			certificate: entry['certificate'],
 			installedAt: entry['installedAt'],
 		};
@@ -809,28 +860,21 @@ function restoreSecurity201(value: unknown): Simulator201State['security'] {
 	if (!isRecord(value['signedChains'])) invalid201('security.signedChains is invalid');
 	const signedChains: Record<string, string> = {};
 	for (const [key, entry] of Object.entries(value['signedChains'])) {
-		if (typeof entry !== 'string' || containsPrivateKeyMaterial(entry)) {
-			invalid201('security.signedChains is invalid');
-		}
-		signedChains[key] = entry;
+		securityText(key, 'security.signedChains key');
+		signedChains[key] = securityText(entry, 'security.signedChains');
 	}
 	const events = value['events'];
 	if (!Array.isArray(events)) invalid201('security.events is invalid');
 	const restoredEvents = events.map((entry, index) => {
-		if (
-			!isRecord(entry) ||
-			typeof entry['type'] !== 'string' ||
-			typeof entry['timestamp'] !== 'string'
-		) {
-			invalid201(`security.events[${index}] is invalid`);
-		}
-		if (typeof entry['techInfo'] === 'string' && containsPrivateKeyMaterial(entry['techInfo'])) {
-			invalid201(`security.events[${index}] is invalid`);
-		}
+		if (!isRecord(entry)) invalid201(`security.events[${index}] is invalid`);
 		return {
-			type: entry['type'],
-			timestamp: entry['timestamp'],
-			...(typeof entry['techInfo'] === 'string' ? { techInfo: entry['techInfo'] } : {}),
+			type: securityText(entry['type'], `security.events[${index}].type`),
+			timestamp: securityText(entry['timestamp'], `security.events[${index}].timestamp`),
+			...(entry['techInfo'] === undefined
+				? {}
+				: {
+						techInfo: securityText(entry['techInfo'], `security.events[${index}].techInfo`),
+					}),
 		};
 	});
 	return {
@@ -2119,10 +2163,12 @@ export class Simulator201 extends EngineBase<Simulator201State> {
 	readonly transactions: TransactionsApi201;
 	readonly availability: AvailabilityApi201;
 	private readonly station: Station201Options;
+	private readonly securityOptions: SecurityOptions201 | undefined;
 
 	constructor(options: Simulator201Options) {
 		super(createSimulator201Profile(options.station, options.security), options);
 		this.station = options.station;
+		this.securityOptions = options.security;
 		this.deviceModel = {
 			variables: () => catalogVariablesFromState201(this.state.variables),
 			sendReport: (reportOptions) => sendNotifyReport201(this, reportOptions),
@@ -2178,6 +2224,7 @@ export class Simulator201 extends EngineBase<Simulator201State> {
 		this.certificates = {
 			list: () => this.state.security.certificates.map((certificate) => clone(certificate)),
 			sign: (csr, type) => sendSignCertificate201(this, csr, type),
+			signWithProvider: (input) => signWithProvider201(this, this.securityOptions, input),
 			get15118: (schemaVersion, action, exiRequest) =>
 				sendGet15118EVCertificate201(this, schemaVersion, action, exiRequest),
 			getStatus: (ocspRequestData) => sendGetCertificateStatus201(this, ocspRequestData),
@@ -2346,6 +2393,12 @@ export class Simulator201 extends EngineBase<Simulator201State> {
 		certificateType?: 'ChargingStationCertificate' | 'V2GCertificate',
 	): Promise<JsonObject> {
 		return sendSignCertificate201(this, csr, certificateType);
+	}
+
+	sendSignCertificateWithProvider(
+		input: SignWithProviderInput201,
+	): Promise<SignWithProviderResult201> {
+		return signWithProvider201(this, this.securityOptions, input);
 	}
 
 	sendGet15118EVCertificate(

@@ -97,5 +97,7 @@ export type {
 	RevocationChecker201,
 	SecurityOptions201,
 	SecurityTrustStore201,
+	SignWithProviderInput201,
+	SignWithProviderResult201,
 } from './profiles/2.0.1/security.js';
 export type { CallContext, CallHandler, PendingCall, RpcOptions } from './rpc.js';

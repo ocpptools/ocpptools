@@ -237,7 +237,9 @@ describe('Simulator201 action matrix', () => {
 		await harness.simulator.sendPublishFirmwareStatus('Idle', undefined, 1);
 		await harness.simulator.sendReservationStatusUpdate(1, 'Removed');
 		await harness.simulator.sendSecurityEvent('Startup');
-		await harness.simulator.sendSignCertificate('csr');
+		await harness.simulator.sendSignCertificate(
+			'-----BEGIN CERTIFICATE REQUEST-----\nMIIB\n-----END CERTIFICATE REQUEST-----',
+		);
 		await harness.simulator.sendStatusNotification(1);
 		await harness.simulator.startChargingSession(1, 'A');
 

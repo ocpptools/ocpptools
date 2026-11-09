@@ -242,16 +242,31 @@ evidence.
 ### Security integration
 
 `Simulator201Options.security` is opt-in and has no effect unless it is set. The
-default remains simulated. This first phase supports
-`validateCertificateChain`; `trustStore` is passed to it with the injected
-clock. Additional callbacks (`csrProvider`, revocation, firmware, ISO 15118)
-are added in their own phases. The engine does not import a crypto library and
-its security state never stores private keys. No X.509/ASN.1/EXI reference
-implementation is bundled; consumers provide their own validator or service.
+default remains simulated. This phase supports `validateCertificateChain`,
+`trustStore`, `csrProvider`, `revocation`, `allowUnknownRevocation`, and
+`callbackTimeoutMs`. `trustStore` and the current clock are passed to the
+validator. A CSR provider can be used with
+`certificates.signWithProvider({ subject, keyRef, certificateType? })`, which
+returns `{ keyRef, response }`. `revocation` runs after a real
+`CertificateSigned` chain validates: `good` accepts, `revoked` rejects,
+`unknown` rejects unless `allowUnknownRevocation` is true, and malformed
+results or errors reject. A rejected real chain emits
+`InvalidChargingStationCertificate`. Root installation through
+`InstallCertificate` is not revocation-checked. A `CertificateSigned` request
+without `certificateType` stores the chain for both uses. `callbackTimeoutMs`
+bounds every injected security callback and defaults to 10 seconds. A validator
+is required for `trustStore`, `revocation`, and `allowUnknownRevocation`; an
+incomplete configuration fails at construction. ISO 15118 and firmware
+callbacks are added in their own phases. The engine does not import a crypto
+library and its security state never stores private keys. Outbound certificate
+requests reject private-key material and malformed CSR values. No
+X.509/ASN.1/EXI reference implementation is bundled; consumers provide their
+own validator or service.
 Snapshots do not contain private keys in security state, but `getHistory()`,
-autosave, and snapshots with `includeHistory` can retain raw inbound frames
-before validation. Clear or redact history before saving or exporting sensitive
-material. A validator implies `mode: 'real'`; an explicit
+autosave, and snapshots with `includeHistory` can retain raw inbound and
+outbound frames before or after validation. Clear or redact history before
+saving or exporting sensitive material. A validator implies `mode: 'real'`; an
+explicit
 `simulated` mode with a validator is rejected. `real` without a validator also
 fails with `invalid-options`.
 
