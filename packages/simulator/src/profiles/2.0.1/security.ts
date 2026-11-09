@@ -8,6 +8,95 @@ import type { CallContext } from '../../rpc.js';
 import { SimulatorError, isAlreadyCountedError } from '../../errors.js';
 import type { Simulator201State } from './index.js';
 
+export type CertificatePurpose201 =
+	| 'V2GRootCertificate'
+	| 'MORootCertificate'
+	| 'CSMSRootCertificate'
+	| 'ManufacturerRootCertificate'
+	| 'ChargingStationCertificate'
+	| 'V2GCertificate'
+	/** CertificateSigned without a certificateType applies to both uses. */
+	| 'Both';
+
+export interface CertificateHashData201 {
+	hashAlgorithm: 'SHA256' | 'SHA384' | 'SHA512';
+	issuerNameHash: string;
+	issuerKeyHash: string;
+	serialNumber: string;
+}
+
+export interface CertificateSummary201 {
+	subject: string;
+	issuer: string;
+	serialNumber: string;
+	notBefore: number;
+	notAfter: number;
+	publicKeyAlgorithm: string;
+	thumbprintSha256: string;
+}
+
+export interface CertificateValidationResult201 {
+	valid: boolean;
+	errors: readonly string[];
+	hashData?: CertificateHashData201;
+	chain?: readonly CertificateSummary201[];
+}
+
+export interface SecurityTrustStore201 {
+	roots: Partial<Record<CertificatePurpose201, readonly string[]>>;
+	intermediates?: readonly string[];
+}
+
+export interface RevocationChecker201 {
+	check(input: {
+		chain: readonly string[];
+		purpose: CertificatePurpose201;
+		now: number;
+	}): Promise<{ status: 'good' | 'revoked' | 'unknown'; reason?: string }>;
+}
+
+export interface CsrProvider201 {
+	create(input: { subject: string; keyRef: string }): Promise<{
+		csrPem: string;
+		keyRef: string;
+	}>;
+}
+
+export interface Iso15118Codec201 {
+	schemaVersion: string;
+	encodeRequest(message: unknown): Promise<string>;
+	decodeResponse(exi: string): Promise<unknown>;
+	validateResponse?(response: unknown): Promise<{ valid: boolean; errors: readonly string[] }>;
+}
+
+export interface FirmwareVerifier201 {
+	verify(input: {
+		firmware: unknown;
+		signature: string;
+		certificateChain: readonly string[];
+		trustStore: SecurityTrustStore201;
+	}): Promise<{ valid: boolean; errors: readonly string[] }>;
+}
+
+export interface CertificateValidationContext201 {
+	now: number;
+	trustStore?: SecurityTrustStore201;
+}
+
+export interface SecurityOptions201 {
+	/**
+	 * `simulated` keeps the historical behavior. Omit it to infer `real` when a
+	 * validator is provided. `real` requires a validator.
+	 */
+	mode?: 'simulated' | 'real';
+	trustStore?: SecurityTrustStore201;
+	validateCertificateChain?: (
+		chain: readonly string[],
+		purpose: CertificatePurpose201,
+		context: CertificateValidationContext201,
+	) => Promise<CertificateValidationResult201>;
+}
+
 export interface SimulatedCertificate201 {
 	certificateType: string;
 	hash: JsonObject;
@@ -28,6 +117,7 @@ export function createSecurityState201(): SecurityState201 {
 
 export function createSecurityHandlers(
 	engine: EngineBase<Simulator201State>,
+	security?: SecurityOptions201,
 ): Record<string, (context: CallContext) => void | Promise<void>> {
 	return {
 		InstallCertificate: async (context) => {
@@ -39,6 +129,42 @@ export function createSecurityHandlers(
 				certificate === ''
 			) {
 				await context.fail('FormatViolation', 'InstallCertificate fields are invalid');
+				return;
+			}
+			if (containsPrivateKey(certificate)) {
+				await context.reply({ status: 'Rejected' });
+				return;
+			}
+			if (security?.mode === 'real') {
+				let validation;
+				try {
+					validation = await security.validateCertificateChain?.(
+						[certificate],
+						certificatePurposeForInstall(certificateType),
+						{
+							now: engine.now(),
+							...(security.trustStore === undefined ? {} : { trustStore: security.trustStore }),
+						},
+					);
+				} catch {
+					await context.reply({ status: 'Rejected' });
+					return;
+				}
+				if (
+					validation?.valid !== true ||
+					!isRecordValue(validation.hashData) ||
+					!validHashData(validation.hashData)
+				) {
+					await context.reply({ status: 'Rejected' });
+					return;
+				}
+				engine.state.security.certificates.push({
+					certificateType,
+					certificate,
+					installedAt: engine.now(),
+					hash: validation.hashData as unknown as JsonObject,
+				});
+				await context.reply({ status: 'Accepted' });
 				return;
 			}
 			const serial = `sim-${engine.state.security.nextSerial}`;
@@ -109,9 +235,48 @@ export function createSecurityHandlers(
 				await context.fail('FormatViolation', 'CertificateSigned fields are invalid');
 				return;
 			}
+			let validatedChain = chain;
+			if (containsPrivateKey(chain)) {
+				await context.reply({ status: 'Rejected' });
+				return;
+			}
+			if (security?.mode === 'real') {
+				const parts = splitPemCertificates(chain);
+				if (
+					hasNonPemContent(chain) ||
+					parts.length === 0 ||
+					!parts.every((part) => part.startsWith('-----BEGIN CERTIFICATE-----'))
+				) {
+					await context.reply({ status: 'Rejected' });
+					return;
+				}
+				let validation;
+				try {
+					validation = await security.validateCertificateChain?.(
+						parts,
+						certificateType === 'V2GCertificate'
+							? 'V2GCertificate'
+							: certificateType === 'ChargingStationCertificate'
+								? 'ChargingStationCertificate'
+								: 'Both',
+						{
+							now: engine.now(),
+							...(security.trustStore === undefined ? {} : { trustStore: security.trustStore }),
+						},
+					);
+				} catch {
+					await context.reply({ status: 'Rejected' });
+					return;
+				}
+				if (validation?.valid !== true) {
+					await context.reply({ status: 'Rejected' });
+					return;
+				}
+				validatedChain = parts.join('\n');
+			}
 			const key =
 				certificateType === 'V2GCertificate' ? 'V2GCertificate' : 'ChargingStationCertificate';
-			engine.state.security.signedChains[key] = chain;
+			engine.state.security.signedChains[key] = validatedChain;
 			engine.state.security.events.push({
 				type: 'CertificateSigned',
 				timestamp: engine.ocppNow(),
@@ -157,6 +322,15 @@ export async function sendSecurityEvent201(
 	type: string,
 	techInfo?: string,
 ): Promise<void> {
+	if (
+		containsPrivateKeyMaterial(type) ||
+		(techInfo !== undefined && containsPrivateKeyMaterial(techInfo))
+	) {
+		throw new SimulatorError(
+			'invalid-options',
+			'Security event text must not contain private key material',
+		);
+	}
 	const timestamp = engine.ocppNow();
 	engine.state.security.events.push({
 		type,
@@ -168,6 +342,54 @@ export async function sendSecurityEvent201(
 		timestamp,
 		...(techInfo === undefined ? {} : { techInfo }),
 	});
+}
+
+function certificatePurposeForInstall(certificateType: string): CertificatePurpose201 {
+	switch (certificateType) {
+		case 'V2GRootCertificate':
+		case 'MORootCertificate':
+		case 'CSMSRootCertificate':
+		case 'ManufacturerRootCertificate':
+			return certificateType;
+		default:
+			return 'CSMSRootCertificate';
+	}
+}
+
+/** Splits a PEM bundle into individual certificate blocks. */
+export function splitPemCertificates(value: string): string[] {
+	const matches = value.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g);
+	return matches === null ? [] : matches;
+}
+
+function hasNonPemContent(value: string): boolean {
+	return (
+		value.replace(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g, '').trim() !== ''
+	);
+}
+
+function containsPrivateKey(value: string): boolean {
+	const begin = '-----BEGIN ';
+	const end = '-----';
+	let from = 0;
+	for (;;) {
+		const start = value.indexOf(begin, from);
+		if (start === -1) return false;
+		const labelStart = start + begin.length;
+		const labelEnd = value.indexOf(end, labelStart);
+		if (labelEnd === -1) return false;
+		if (value.slice(labelStart, labelEnd).includes('PRIVATE KEY')) return true;
+		from = labelEnd + end.length;
+	}
+}
+
+/** True when a string contains a PEM private-key block. */
+export function containsPrivateKeyMaterial(value: string): boolean {
+	return containsPrivateKey(value);
+}
+
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function validInstallUse(value: unknown): value is string {

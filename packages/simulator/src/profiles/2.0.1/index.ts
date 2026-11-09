@@ -38,12 +38,14 @@ import {
 	type ServicesState201,
 } from './services.js';
 import {
+	containsPrivateKeyMaterial,
 	createSecurityHandlers,
 	createSecurityState201,
 	sendGet15118EVCertificate201,
 	sendGetCertificateStatus201,
 	sendSecurityEvent201,
 	sendSignCertificate201,
+	type SecurityOptions201,
 	type SecurityState201,
 	type SimulatedCertificate201,
 } from './security.js';
@@ -168,6 +170,8 @@ export interface Station201Options {
 
 export interface Simulator201Options extends CommonSimulatorOptions {
 	readonly station: Station201Options;
+	/** Opt-in real certificate integration. Defaults to simulated. */
+	readonly security?: SecurityOptions201;
 }
 
 export interface DeviceModelApi201 {
@@ -263,7 +267,27 @@ const meterLoops = new WeakMap<object, Map<number, () => void>>();
 
 export function createSimulator201Profile(
 	station: Station201Options,
+	security?: SecurityOptions201,
 ): EngineProfile<Simulator201State> {
+	const securityMode =
+		security?.mode ?? (security?.validateCertificateChain === undefined ? 'simulated' : 'real');
+	if (securityMode !== 'simulated' && securityMode !== 'real') {
+		throw new SimulatorError('invalid-options', 'Invalid security mode');
+	}
+	if (securityMode === 'real' && security?.validateCertificateChain === undefined) {
+		throw new SimulatorError(
+			'invalid-options',
+			'Real security mode requires validateCertificateChain',
+		);
+	}
+	if (securityMode === 'simulated' && security?.validateCertificateChain !== undefined) {
+		throw new SimulatorError(
+			'invalid-options',
+			'A certificate validator requires real security mode',
+		);
+	}
+	const effectiveSecurity =
+		security === undefined ? undefined : { ...security, mode: securityMode };
 	const evseCount = clampEvses(station.evseCount ?? 1);
 	const defaultPower = normalizePower(station.defaultChargingPowerKw ?? 0);
 
@@ -320,7 +344,7 @@ export function createSimulator201Profile(
 				: {}),
 		}),
 		register: (engine) => {
-			registerInbound(engine);
+			registerInbound(engine, effectiveSecurity);
 		},
 		restoreState: (value) => restoreSimulator201State(value),
 		onRestored: (engine) => {
@@ -771,6 +795,7 @@ function restoreSecurity201(value: unknown): Simulator201State['security'] {
 			typeof entry['certificateType'] !== 'string' ||
 			!isRecord(entry['hash']) ||
 			typeof entry['certificate'] !== 'string' ||
+			containsPrivateKeyMaterial(entry['certificate']) ||
 			!isFiniteNumber(entry['installedAt'])
 		) {
 			invalid201(`security.certificates[${index}] is invalid`);
@@ -785,7 +810,9 @@ function restoreSecurity201(value: unknown): Simulator201State['security'] {
 	if (!isRecord(value['signedChains'])) invalid201('security.signedChains is invalid');
 	const signedChains: Record<string, string> = {};
 	for (const [key, entry] of Object.entries(value['signedChains'])) {
-		if (typeof entry !== 'string') invalid201('security.signedChains is invalid');
+		if (typeof entry !== 'string' || containsPrivateKeyMaterial(entry)) {
+			invalid201('security.signedChains is invalid');
+		}
 		signedChains[key] = entry;
 	}
 	const events = value['events'];
@@ -796,6 +823,9 @@ function restoreSecurity201(value: unknown): Simulator201State['security'] {
 			typeof entry['type'] !== 'string' ||
 			typeof entry['timestamp'] !== 'string'
 		) {
+			invalid201(`security.events[${index}] is invalid`);
+		}
+		if (typeof entry['techInfo'] === 'string' && containsPrivateKeyMaterial(entry['techInfo'])) {
 			invalid201(`security.events[${index}] is invalid`);
 		}
 		return {
@@ -1410,7 +1440,10 @@ function buildMeterValue(
 	};
 }
 
-function registerInbound(engine: EngineBase<Simulator201State>): void {
+function registerInbound(
+	engine: EngineBase<Simulator201State>,
+	security?: SecurityOptions201,
+): void {
 	const rejectable: Record<string, JsonObject> = {
 		RequestStartTransaction: { status: 'Rejected' },
 		RequestStopTransaction: { status: 'Rejected' },
@@ -1833,7 +1866,7 @@ function registerInbound(engine: EngineBase<Simulator201State>): void {
 	Object.assign(handlers, createLocalAuthHandlers(engine));
 	Object.assign(handlers, createChargingHandlers(engine));
 	Object.assign(handlers, createServicesHandlers(engine));
-	Object.assign(handlers, createSecurityHandlers(engine));
+	Object.assign(handlers, createSecurityHandlers(engine, security));
 
 	for (const [action, handler] of Object.entries(handlers)) {
 		engine.onCall(action, async (context) => {
@@ -2083,7 +2116,7 @@ export class Simulator201 extends EngineBase<Simulator201State> {
 	private readonly station: Station201Options;
 
 	constructor(options: Simulator201Options) {
-		super(createSimulator201Profile(options.station), options);
+		super(createSimulator201Profile(options.station, options.security), options);
 		this.station = options.station;
 		this.deviceModel = {
 			variables: () => clone(this.state.variables),

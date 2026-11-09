@@ -85,4 +85,17 @@ export type { LogDirection, LogLevel, LogMessageType, SimulatorLogEntry } from '
 export { defaultRandom } from './random.js';
 export type { RandomSource } from './random.js';
 export { Rpc } from './rpc.js';
+export type {
+	CertificateHashData201,
+	CertificatePurpose201,
+	CertificateSummary201,
+	CertificateValidationContext201,
+	CertificateValidationResult201,
+	CsrProvider201,
+	FirmwareVerifier201,
+	Iso15118Codec201,
+	RevocationChecker201,
+	SecurityOptions201,
+	SecurityTrustStore201,
+} from './profiles/2.0.1/security.js';
 export type { CallContext, CallHandler, PendingCall, RpcOptions } from './rpc.js';
