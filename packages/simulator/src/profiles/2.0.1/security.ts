@@ -81,13 +81,22 @@ export interface Iso15118Codec201 {
 	}): Promise<{ valid: boolean; errors: readonly string[] }>;
 }
 
+export type FirmwareFailureReason201 =
+	'invalid-certificate' | 'revoked' | 'invalid-signature' | 'internal';
+
 export interface FirmwareVerifier201 {
 	verify(input: {
-		firmware: unknown;
+		/** Metadata needed to locate the image; the verifier owns any download. */
+		firmware: JsonObject;
 		signature: string;
-		certificateChain: readonly string[];
-		trustStore: SecurityTrustStore201;
-	}): Promise<{ valid: boolean; errors: readonly string[] }>;
+		signingCertificate: string;
+		trustStore?: SecurityTrustStore201;
+		now: number;
+	}): Promise<{
+		valid: boolean;
+		reason?: FirmwareFailureReason201;
+		errors: readonly string[];
+	}>;
 }
 
 export interface CertificateValidationContext201 {
@@ -111,12 +120,14 @@ export interface SecurityOptions201 {
 	) => Promise<CertificateValidationResult201>;
 	/** Generates a CSR without exposing private keys to the simulator. */
 	csrProvider?: CsrProvider201;
-	/** Optional revocation check for the leaf chain in CertificateSigned. */
+	/** Optional revocation check for CertificateSigned chains and firmware signing certificates. */
 	revocation?: RevocationChecker201;
 	/** Accept `unknown` revocation results. `revoked` and malformed results always fail. */
 	allowUnknownRevocation?: boolean;
 	/** Optional ISO 15118/EXI codec for Get15118EVCertificate. */
 	iso15118?: Iso15118Codec201;
+	/** Verifies the downloaded firmware image through an injected callback. */
+	firmwareVerifier?: FirmwareVerifier201;
 	/** Upper bound for injected security callbacks. Defaults to 10 seconds. */
 	callbackTimeoutMs?: number;
 }
@@ -392,27 +403,40 @@ function certificatePurposeForSigned(
 	return 'Both';
 }
 
-async function revocationAllows201(
+export type RevocationStatus201 = 'good' | 'revoked' | 'unknown' | 'invalid';
+
+/** Runs the injected revocation checker; malformed results and errors fail closed. */
+export async function checkRevocation201(
 	engine: EngineBase<Simulator201State>,
 	security: SecurityOptions201,
 	chain: readonly string[],
 	purpose: CertificatePurpose201,
-): Promise<boolean> {
+): Promise<RevocationStatus201> {
 	const checker = security.revocation;
-	if (checker === undefined) return true;
+	if (checker === undefined) return 'good';
 	let result: unknown;
 	try {
 		result = await runSecurityCallback201(engine, security, () =>
 			checker.check({ chain, purpose, now: engine.now() }),
 		);
 	} catch {
-		return false;
+		return 'invalid';
 	}
-	if (!isRecordValue(result)) return false;
-	if (result['status'] === 'good') return true;
-	if (result['status'] === 'revoked') return false;
-	if (result['status'] === 'unknown') return security.allowUnknownRevocation === true;
-	return false;
+	if (!isRecordValue(result)) return 'invalid';
+	if (result['status'] === 'good') return 'good';
+	if (result['status'] === 'revoked') return 'revoked';
+	if (result['status'] === 'unknown') return 'unknown';
+	return 'invalid';
+}
+
+async function revocationAllows201(
+	engine: EngineBase<Simulator201State>,
+	security: SecurityOptions201,
+	chain: readonly string[],
+	purpose: CertificatePurpose201,
+): Promise<boolean> {
+	const status = await checkRevocation201(engine, security, chain, purpose);
+	return status === 'good' || (status === 'unknown' && security.allowUnknownRevocation === true);
 }
 
 async function rejectSignedCertificate(

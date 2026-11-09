@@ -254,9 +254,10 @@ results or errors reject. A rejected real chain emits
 `InvalidChargingStationCertificate`. Root installation through
 `InstallCertificate` is not revocation-checked. A `CertificateSigned` request
 without `certificateType` stores the chain for both uses. `callbackTimeoutMs`
-bounds every injected security callback and defaults to 10 seconds. A validator
-is required for `trustStore`, `revocation`, and `allowUnknownRevocation`; an
-incomplete configuration fails at construction. An `iso15118` codec enables
+bounds every injected security callback and defaults to 10 seconds. `trustStore`
+and `revocation` require a certificate validator or a firmware verifier, and
+`allowUnknownRevocation` requires a revocation checker; an incomplete
+configuration fails at construction. An `iso15118` codec enables
 `certificates.get15118Message(schemaVersion, action, payload)`: the simulator
 encodes the request, sends `Get15118EVCertificate`, requires an `Accepted`
 response with a valid `exiResponse`, decodes it, and optionally runs
@@ -265,7 +266,16 @@ response with a valid `exiResponse`, decodes it, and optionally runs
 and `{ schemaVersion, action, response }` in `validateResponse`. Requests and
 responses are limited to 5600 characters and reject PEM private-key material.
 Without a codec, the raw request/response methods remain available and no EXI
-implementation is bundled. Firmware callbacks are added in their own phase. The engine does not import a crypto library and its security
+implementation is bundled. A `firmwareVerifier` enables real
+`UpdateFirmware` checks: the request-level signing certificate is validated and
+revocation-checked when a validator or checker is configured, returning
+`InvalidCertificate` or `RevokedCertificate`; after the simulated download, the
+verifier receives the firmware metadata, signature and signing certificate,
+and owns any image download. A valid result emits `SignatureVerified`; an
+invalid one emits `InvalidSignature` or `InstallVerificationFailed`. The engine
+still never flashes hardware or fetches the image. In simulated mode without a
+verifier, the firmware state machine is unchanged; real mode rejects
+`UpdateFirmware` when no verifier is configured. The engine does not import a crypto library and its security
 state never stores private keys. Outbound certificate requests reject
 private-key material and malformed CSR values. No X.509/ASN.1/EXI reference
 implementation is bundled; consumers provide their own validator or service.

@@ -27,6 +27,7 @@ import {
 	type ChargingProfileState201,
 } from './charging.js';
 import {
+	cancelFirmwareTimers201,
 	createServicesHandlers,
 	createServicesState201,
 	removeTransactionDisplays201,
@@ -300,14 +301,25 @@ export function createSimulator201Profile(
 			'A certificate validator requires real security mode',
 		);
 	}
-	if (security?.revocation !== undefined && security.validateCertificateChain === undefined) {
+	if (
+		security?.revocation !== undefined &&
+		security.validateCertificateChain === undefined &&
+		security.firmwareVerifier === undefined
+	) {
 		throw new SimulatorError(
 			'invalid-options',
-			'Revocation checking requires validateCertificateChain',
+			'Revocation checking requires validateCertificateChain or firmwareVerifier',
 		);
 	}
-	if (security?.trustStore !== undefined && security.validateCertificateChain === undefined) {
-		throw new SimulatorError('invalid-options', 'trustStore requires validateCertificateChain');
+	if (
+		security?.trustStore !== undefined &&
+		security.validateCertificateChain === undefined &&
+		security.firmwareVerifier === undefined
+	) {
+		throw new SimulatorError(
+			'invalid-options',
+			'trustStore requires validateCertificateChain or firmwareVerifier',
+		);
 	}
 	if (security?.allowUnknownRevocation === true && security.revocation === undefined) {
 		throw new SimulatorError(
@@ -380,6 +392,20 @@ export function createSimulator201Profile(
 		onRestored: (engine) => {
 			rearmReservations201(engine);
 			rearmMonitoringTimers201(engine);
+			cancelFirmwareTimers201(engine);
+			const firmware = engine.state.services.firmware;
+			if (
+				firmware.status === 'DownloadScheduled' ||
+				firmware.status === 'Downloading' ||
+				firmware.status === 'Downloaded' ||
+				firmware.status === 'SignatureVerified' ||
+				firmware.status === 'InstallScheduled' ||
+				firmware.status === 'Installing'
+			) {
+				firmware.status = 'Idle';
+				delete firmware.update;
+				delete firmware.requestId;
+			}
 			if (engine.isReady) {
 				for (const evse of engine.state.evses) {
 					if (evse.transaction !== null) {
@@ -787,6 +813,23 @@ function restoreCharging201(value: unknown): Simulator201State['charging'] {
 	};
 }
 
+const FIRMWARE_STATUS_VALUES_201 = new Set([
+	'Downloaded',
+	'DownloadFailed',
+	'Downloading',
+	'DownloadScheduled',
+	'DownloadPaused',
+	'Idle',
+	'InstallationFailed',
+	'Installing',
+	'Installed',
+	'InstallRebooting',
+	'InstallScheduled',
+	'InstallVerificationFailed',
+	'InvalidSignature',
+	'SignatureVerified',
+]);
+
 function restoreServices201(value: unknown): Simulator201State['services'] {
 	if (!isRecord(value)) invalid201('services is invalid');
 	const displays = value['displays'];
@@ -804,13 +847,70 @@ function restoreServices201(value: unknown): Simulator201State['services'] {
 	) {
 		invalid201('services is invalid');
 	}
+	const firmware = value['firmware'];
+	if (!isRecord(firmware)) invalid201('services.firmware is invalid');
+	const firmwareStatus = firmware['status'];
+	if (
+		firmwareStatus !== undefined &&
+		(typeof firmwareStatus !== 'string' || !FIRMWARE_STATUS_VALUES_201.has(firmwareStatus))
+	) {
+		invalid201('services.firmware.status is invalid');
+	}
+	const firmwareRequestId = firmware['requestId'];
+	if (
+		firmwareRequestId !== undefined &&
+		(typeof firmwareRequestId !== 'number' || !Number.isInteger(firmwareRequestId))
+	) {
+		invalid201('services.firmware.requestId is invalid');
+	}
+	const restoredFirmware = { ...firmware };
+	delete restoredFirmware['update'];
+	const update = firmware['update'];
+	if (update !== undefined) {
+		if (!isRecord(update)) invalid201('services.firmware.update is invalid');
+		const location = securityText(update['location'], 'services.firmware.update.location');
+		const retrieveDateTime = securityText(
+			update['retrieveDateTime'],
+			'services.firmware.update.retrieveDateTime',
+		);
+		const signature = securityText(update['signature'], 'services.firmware.update.signature');
+		const signingCertificate = securityText(
+			update['signingCertificate'],
+			'services.firmware.update.signingCertificate',
+		);
+		const installDateTime = update['installDateTime'];
+		if (
+			location === '' ||
+			location.trim() === '' ||
+			location.length > 512 ||
+			retrieveDateTime === '' ||
+			!Number.isFinite(Date.parse(retrieveDateTime)) ||
+			signature === '' ||
+			signature.length > 800 ||
+			signingCertificate === '' ||
+			signingCertificate.length > 5500 ||
+			(installDateTime !== undefined &&
+				(typeof installDateTime !== 'string' ||
+					containsPrivateKeyMaterial(installDateTime) ||
+					!Number.isFinite(Date.parse(installDateTime))))
+		) {
+			invalid201('services.firmware.update is invalid');
+		}
+		restoredFirmware['update'] = {
+			location,
+			retrieveDateTime,
+			...(typeof installDateTime === 'string' ? { installDateTime } : {}),
+			signature,
+			signingCertificate,
+		};
+	}
 	return {
 		displays: displays.map((entry) => ({
 			message: { ...((entry as Record<string, unknown>)['message'] as JsonObject) },
 		})),
 		cost: { ...value['cost'] },
 		customer: { ...value['customer'] },
-		firmware: { ...value['firmware'] },
+		firmware: restoredFirmware,
 		log: { ...value['log'] },
 	};
 }
@@ -1711,7 +1811,9 @@ function registerInbound(
 				const firmware = engine.state.services.firmware;
 				const status =
 					firmware.status === 'Installed' ||
-					firmware.status === 'InstallFailed' ||
+					firmware.status === 'InstallationFailed' ||
+					firmware.status === 'InstallVerificationFailed' ||
+					firmware.status === 'InvalidSignature' ||
 					firmware.status === 'DownloadFailed'
 						? 'Idle'
 						: (firmware.status ?? 'Idle');
@@ -1919,7 +2021,7 @@ function registerInbound(
 	Object.assign(handlers, createDeviceModelHandlers(engine));
 	Object.assign(handlers, createLocalAuthHandlers(engine));
 	Object.assign(handlers, createChargingHandlers(engine));
-	Object.assign(handlers, createServicesHandlers(engine));
+	Object.assign(handlers, createServicesHandlers(engine, security));
 	Object.assign(handlers, createSecurityHandlers(engine, security));
 
 	for (const [action, handler] of Object.entries(handlers)) {
