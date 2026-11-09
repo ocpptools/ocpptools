@@ -1,5 +1,15 @@
 # @ocpptools/simulator
 
+## 0.3.0
+
+### Minor Changes
+
+- 13850e2: Add the Node adapter in `@ocpptools/simulator/node`: a WebSocket transport
+  backed by the Node 22 built-in implementation, `nodeClock`, an in-memory
+  `Storage`, and an atomic file-backed `Storage` that hashes keys and retries
+  transient rename errors. The package still depends only on `@ocpptools/core` at
+  runtime.
+
 ## 0.2.0
 
 ### Minor Changes
