@@ -176,21 +176,27 @@ describe('Simulator201 real security integration', () => {
 	it('rejects private key blocks in simulated mode', async () => {
 		const harness = createHarness201();
 		await harness.ready();
-		const privateKey =
-			'-----BEGIN PGP PRIVATE KEY BLOCK-----secret-----END PGP PRIVATE KEY BLOCK-----';
-		expect(
-			await call(harness, 'sim-key-1', 'InstallCertificate', {
-				certificateType: 'CSMSRootCertificate',
-				certificate: privateKey,
-			}),
-		).toEqual({ status: 'Rejected' });
-		expect(
-			await call(harness, 'sim-key-2', 'CertificateSigned', {
-				certificateChain: privateKey,
-			}),
-		).toEqual({ status: 'Rejected' });
+		const privateKeys = [
+			'-----BEGIN PGP PRIVATE KEY BLOCK-----secret-----END PGP PRIVATE KEY BLOCK-----',
+			'-----BEGIN -----BEGIN RSA PRIVATE KEY-----secret-----END RSA PRIVATE KEY-----',
+			'-----begin rsa private key-----secret-----end rsa private key-----',
+		];
+		for (const [index, privateKey] of privateKeys.entries()) {
+			expect(
+				await call(harness, `sim-key-install-${String(index)}`, 'InstallCertificate', {
+					certificateType: 'CSMSRootCertificate',
+					certificate: privateKey,
+				}),
+			).toEqual({ status: 'Rejected' });
+			expect(
+				await call(harness, `sim-key-signed-${String(index)}`, 'CertificateSigned', {
+					certificateChain: privateKey,
+				}),
+			).toEqual({ status: 'Rejected' });
+		}
 		expect(harness.simulator.state.security.certificates).toHaveLength(0);
 		expect(harness.simulator.state.security.signedChains).toEqual({});
+		expect(harness.calls('SecurityEventNotification')).toHaveLength(0);
 	});
 
 	it('does not call a validator for non-PEM signed chains', async () => {
@@ -217,14 +223,16 @@ describe('Simulator201 real security integration', () => {
 	it('rejects snapshots that contain private key material in security state', async () => {
 		const harness = createHarness201();
 		await harness.ready();
-		const snapshot = harness.simulator.exportSnapshot() as unknown as {
+		interface SnapshotShape {
 			state: {
 				security: {
 					certificates: Array<Record<string, unknown>>;
 					signedChains: Record<string, string>;
+					events: Array<Record<string, unknown>>;
 				};
 			};
-		};
+		}
+		const snapshot = harness.simulator.exportSnapshot() as unknown as SnapshotShape;
 		snapshot.state.security.certificates.push({
 			certificateType: 'CSMSRootCertificate',
 			certificate: '-----BEGIN PRIVATE KEY-----secret-----END PRIVATE KEY-----',
@@ -239,17 +247,77 @@ describe('Simulator201 real security integration', () => {
 		const result = harness.simulator.restoreSnapshot(snapshot);
 		expect(result.restored).toBe(false);
 		expect(result.error?.code).toBe('invalid-snapshot');
+
+		const hostile = [
+			'-----BEGIN -----BEGIN RSA PRIVATE KEY-----secret-----END RSA PRIVATE KEY-----',
+			'-----begin rsa private key-----secret-----end rsa private key-----',
+		];
+		for (const secret of hostile) {
+			const next = harness.simulator.exportSnapshot() as unknown as SnapshotShape;
+			next.state.security.signedChains['ChargingStationCertificate'] = secret;
+			const signedResult = harness.simulator.restoreSnapshot(next);
+			expect(signedResult.restored).toBe(false);
+			expect(signedResult.error?.code).toBe('invalid-snapshot');
+		}
+
+		const fields: Array<(snapshot: SnapshotShape) => void> = [
+			(next) => {
+				next.state.security.certificates[0]!['certificateType'] = hostile[0];
+			},
+			(next) => {
+				const hash = next.state.security.certificates[0]!['hash'] as Record<string, unknown>;
+				hash['issuerNameHash'] = hostile[0];
+			},
+			(next) => {
+				next.state.security.signedChains[hostile[0]!] = 'chain';
+			},
+			(next) => {
+				next.state.security.events.push({ type: hostile[0]!, timestamp: '2020-01-01T00:00:00Z' });
+			},
+		];
+		for (const mutate of fields) {
+			const next = harness.simulator.exportSnapshot() as unknown as SnapshotShape;
+			next.state.security.certificates = [
+				{
+					certificateType: 'CSMSRootCertificate',
+					certificate: 'cert',
+					hash: {
+						hashAlgorithm: 'SHA256',
+						issuerNameHash: 'issuer',
+						issuerKeyHash: 'key',
+						serialNumber: '01',
+					},
+					installedAt: 1,
+				},
+			];
+			mutate(next);
+			const fieldResult = harness.simulator.restoreSnapshot(next);
+			expect(fieldResult.restored).toBe(false);
+			expect(fieldResult.error?.code).toBe('invalid-snapshot');
+		}
+	});
+
+	it('round-trips accepted empty security strings', async () => {
+		const harness = createHarness201();
+		await harness.ready();
+		await harness.simulator.sendSecurityEvent('Startup', '');
+		expect(harness.simulator.restoreSnapshot(harness.simulator.exportSnapshot())).toEqual({
+			restored: true,
+		});
 	});
 
 	it('rejects private key material in security event text', async () => {
 		const harness = createHarness201();
 		await harness.ready();
-		await expect(
-			harness.simulator.sendSecurityEvent(
-				'FirmwareUpdated',
-				'-----BEGIN PRIVATE KEY-----secret-----END PRIVATE KEY-----',
-			),
-		).rejects.toThrow('private key');
+		for (const privateKey of [
+			'-----BEGIN PRIVATE KEY-----secret-----END PRIVATE KEY-----',
+			'-----BEGIN -----BEGIN RSA PRIVATE KEY-----secret-----END RSA PRIVATE KEY-----',
+			'-----begin rsa private key-----secret-----end rsa private key-----',
+		]) {
+			await expect(
+				harness.simulator.sendSecurityEvent('FirmwareUpdated', privateKey),
+			).rejects.toThrow('private key');
+		}
 		expect(harness.simulator.state.security.events).toHaveLength(0);
 		await harness.simulator.sendSecurityEvent('FirmwareUpdated', 'firmware verified');
 		expect(harness.simulator.state.security.events).toHaveLength(1);
@@ -389,7 +457,11 @@ describe('Simulator201 security', () => {
 	it('sends certificate and security requests', async () => {
 		const harness = createHarness201();
 		await harness.ready();
-		expect(await harness.simulator.sendSignCertificate('csr')).toMatchObject({
+		expect(
+			await harness.simulator.sendSignCertificate(
+				'-----BEGIN CERTIFICATE REQUEST-----\nMIIB\n-----END CERTIFICATE REQUEST-----',
+			),
+		).toMatchObject({
 			status: 'Accepted',
 		});
 		expect(
@@ -399,7 +471,9 @@ describe('Simulator201 security', () => {
 			await harness.simulator.sendGetCertificateStatus(ocspData('1') as JsonObject),
 		).toMatchObject({ status: 'Accepted', ocspResult: 'ocsp-response' });
 		await harness.simulator.sendSecurityEvent('FirmwareUpdated', '1.0.0');
-		expect(harness.calls('SignCertificate')[0]![3]).toEqual({ csr: 'csr' });
+		expect(harness.calls('SignCertificate')[0]![3]).toEqual({
+			csr: '-----BEGIN CERTIFICATE REQUEST-----\nMIIB\n-----END CERTIFICATE REQUEST-----',
+		});
 		expect(harness.calls('Get15118EVCertificate')[0]![3]).toEqual({
 			iso15118SchemaVersion: 'iso2',
 			action: 'Install',
