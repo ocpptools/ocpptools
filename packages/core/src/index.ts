@@ -38,5 +38,5 @@ export type {
 	TransportState,
 	Unsubscribe,
 } from './transport.js';
-export { OCPP_SUBPROTOCOLS, OCPP_VERSIONS } from './version.js';
+export { OCPP_SUBPROTOCOLS, OCPP_VERSIONS, isOcppVersion } from './version.js';
 export type { OcppSubprotocol, OcppVersion } from './version.js';

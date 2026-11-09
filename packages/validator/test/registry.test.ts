@@ -34,9 +34,19 @@ describe('schemaFileName', () => {
 			expect(schemaFileName('2.0.1', action as unknown as string, 'request')).toBeUndefined();
 		}
 	});
+
+	it('refuses an unsupported version', () => {
+		expect(schemaFileName('2.1.0' as never, 'Heartbeat', 'request')).toBeUndefined();
+	});
 });
 
 describe('createSchemaRegistry', () => {
+	it('rejects an unsupported version explicitly', () => {
+		expect(() =>
+			createSchemaRegistry({ version: '2.1.0' as never, load: () => undefined }),
+		).toThrow('Unsupported OCPP version: 2.1.0. Supported versions: 1.6 and 2.0.1');
+	});
+
 	it('loads the schema of a request and of a response from different files', async () => {
 		const load = vi.fn((fileName: string) => ({ file: fileName }));
 		const registry = createSchemaRegistry({ version: '2.0.1', load });

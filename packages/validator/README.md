@@ -47,6 +47,11 @@ if (result.status !== 'valid') {
 }
 ```
 
+Only OCPP 1.6J and 2.0.1 are supported. `createValidator` and
+`createSchemaRegistry` throw a clear `Unsupported OCPP version` error for
+anything else, including OCPP 2.1.0, before loading a schema. `schemaFileName`
+returns `undefined` for an unsupported version.
+
 A string is parsed as JSON text. Any other value is treated as an already parsed
 frame:
 

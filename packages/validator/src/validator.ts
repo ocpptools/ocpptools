@@ -18,6 +18,7 @@ import type {
 	ValidationResult,
 	Validator,
 } from './types.js';
+import { assertOcppVersion } from './version.js';
 
 class SchemaInvalidError extends Error {
 	readonly reason: string;
@@ -215,10 +216,11 @@ function uncheckedResult(): ValidationIssue {
 /**
  * Creates a validator for one OCPP version. Schemas are loaded and compiled on
  * first use, and a failed load or compilation is not cached, so the next call
- * tries again.
+ * tries again. It throws when `version` is not supported.
  */
 export function createValidator(options: CreateValidatorOptions): Validator {
 	const { schemas, version } = options;
+	assertOcppVersion(version);
 	const ajv = createAjv();
 	const cache = new Map<string, Promise<ValidateFunction | undefined>>();
 

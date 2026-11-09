@@ -50,6 +50,9 @@ describe('simulator public API', () => {
 		expect(() => createSimulator({ version: '9.9', ...options16() } as never)).toThrow(
 			SimulatorError,
 		);
+		expect(() => createSimulator({ version: '2.1.0', ...options16() } as never)).toThrow(
+			'Unsupported simulator version: 2.1.0',
+		);
 	});
 
 	it('exposes the lifecycle aliases and sub-apis', async () => {

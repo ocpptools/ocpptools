@@ -73,6 +73,11 @@ describe('isErrorCode', () => {
 			expectTypeOf(code).toEqualTypeOf<OcppErrorCode<'2.0.1'>>();
 		}
 	});
+
+	it('returns false for an unsupported version instead of throwing', () => {
+		expect(() => isErrorCode('2.1.0' as never, 'GenericError')).not.toThrow();
+		expect(isErrorCode('2.1.0' as never, 'GenericError')).toBe(false);
+	});
 });
 
 describe('OcppErrorCode', () => {

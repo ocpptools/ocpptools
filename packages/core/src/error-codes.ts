@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Rodolfo Carrillo
 
-import type { OcppVersion } from './version.js';
+import { isOcppVersion, type OcppVersion } from './version.js';
 
 /**
  * The CALLERROR error codes of each OCPP version. The sets differ and must not
@@ -48,12 +48,15 @@ export type OcppErrorCode<Version extends OcppVersion = OcppVersion> =
 /**
  * Whether `code` is an error code defined for `version`. A peer can send a code
  * outside the set, so frame parsing does not reject unknown codes; use this to
- * check them.
+ * check them. It returns `false` for an unsupported version instead of throwing.
  */
 export function isErrorCode<Version extends OcppVersion>(
 	version: Version,
 	code: unknown,
 ): code is OcppErrorCode<Version> {
+	if (!isOcppVersion(version)) {
+		return false;
+	}
 	return (
 		typeof code === 'string' && (OCPP_ERROR_CODES[version] as readonly string[]).includes(code)
 	);

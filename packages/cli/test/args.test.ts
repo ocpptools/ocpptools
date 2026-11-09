@@ -62,6 +62,7 @@ describe('arguments', () => {
 			['unknown'],
 			['validate', 'frame.json'],
 			['validate', 'frame.json', '--version', '2.1'],
+			['validate', 'frame.json', '--version', '2.1.0'],
 			['validate', 'frame.json', '--version', '1.6', '--bogus'],
 			['validate', 'a.json', 'b.json', '--version', '1.6'],
 			['validate', 'frame.json', '--version', '1.6', '--version', '2.0.1'],
@@ -97,6 +98,16 @@ describe('arguments', () => {
 		await expect(runCli(['--unknown'], captured.io)).resolves.toBe(2);
 		expect(captured.stderr()).toContain('Unknown command');
 		expect(captured.stderr()).toContain('Usage:');
+		expect(captured.stdout()).toBe('');
+	});
+
+	it('rejects OCPP 2.1.0 with a clear usage error', async () => {
+		const captured = captureIo();
+		await expect(
+			runCli(['validate', 'frame.json', '--version', '2.1.0'], captured.io),
+		).resolves.toBe(2);
+		expect(captured.stderr()).toContain('Unsupported OCPP version: 2.1.0');
+		expect(captured.stderr()).toContain('Use 1.6 or 2.0.1');
 		expect(captured.stdout()).toBe('');
 	});
 });

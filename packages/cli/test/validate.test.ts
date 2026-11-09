@@ -122,6 +122,7 @@ describe('validate command', () => {
 			['validate', join(tmpdir(), 'definitely-missing-ocpptools.json'), '--version', '1.6'],
 			['validate', invalidJson, '--version', '1.6'],
 			['validate', invalidJson, '--version', '2.1'],
+			['validate', invalidJson, '--version', '2.1.0'],
 			['validate', invalidJson],
 		];
 		for (const args of cases) {

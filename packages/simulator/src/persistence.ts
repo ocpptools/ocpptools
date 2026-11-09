@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Rodolfo Carrillo
 
-import type { JsonObject, OcppVersion } from '@ocpptools/core';
+import { isOcppVersion, type JsonObject, type OcppVersion } from '@ocpptools/core';
 
 import type { InboundResponseMode, ValidateMode } from './events.js';
 import type { SimulatorErrorSnapshot } from './errors.js';
@@ -44,7 +44,6 @@ export interface RestoreResult {
 }
 
 const SNAPSHOT_VERSION = 1;
-const PROTOCOLS: readonly OcppVersion[] = ['1.6', '2.0.1'];
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -97,12 +96,11 @@ export function validateSnapshot(
 	if (snapshot['snapshotVersion'] !== SNAPSHOT_VERSION) {
 		throw new Error(`Unsupported snapshot version: ${String(snapshot['snapshotVersion'])}`);
 	}
-	if (
-		typeof snapshot['protocol'] !== 'string' ||
-		!PROTOCOLS.includes(snapshot['protocol'] as OcppVersion) ||
-		snapshot['protocol'] !== protocol
-	) {
-		throw new Error(`The snapshot protocol does not match ${protocol}`);
+	if (!isOcppVersion(snapshot['protocol'])) {
+		throw new Error(`Unsupported snapshot protocol: ${String(snapshot['protocol'])}`);
+	}
+	if (snapshot['protocol'] !== protocol) {
+		throw new Error(`The snapshot protocol ${snapshot['protocol']} does not match ${protocol}`);
 	}
 	if (!isFiniteNumber(snapshot['savedAt']) || snapshot['savedAt'] < 0) {
 		throw new Error('savedAt must be a non-negative number');
