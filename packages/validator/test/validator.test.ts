@@ -12,6 +12,12 @@ function registry(get: SchemaRegistry['get']): SchemaRegistry {
 }
 
 describe('createValidator', () => {
+	it('rejects an unsupported version explicitly', () => {
+		expect(() =>
+			createValidator({ version: '2.1.0' as never, schemas: registry(() => ({})) }),
+		).toThrow('Unsupported OCPP version: 2.1.0. Supported versions: 1.6 and 2.0.1');
+	});
+
 	it('keeps the version it was created for', () => {
 		const validator = createValidator({
 			version: '1.6',

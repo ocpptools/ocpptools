@@ -3,7 +3,7 @@
 
 import { isErrorCode } from './error-codes.js';
 import { MESSAGE_TYPE, type MessageId, type MessageType } from './frame.js';
-import type { OcppVersion } from './version.js';
+import { OCPP_VERSIONS, isOcppVersion, type OcppVersion } from './version.js';
 
 /** The longest message ID OCPP-J allows. */
 export const MAX_MESSAGE_ID_LENGTH = 36;
@@ -23,6 +23,8 @@ export const MAX_MESSAGE_ID_LENGTH = 36;
  * - `unknown-error-code`: the error code is not defined for the version given.
  * - `invalid-error-description`: the error description is not a string.
  * - `invalid-error-details`: the error details are not a JSON object.
+ * - `unsupported-version`: the `version` option is not one this package supports. It
+ *   reports a caller error, not a defect of the frame.
  */
 export type FrameIssueCode =
 	| 'not-array'
@@ -36,9 +38,10 @@ export type FrameIssueCode =
 	| 'invalid-error-code'
 	| 'unknown-error-code'
 	| 'invalid-error-description'
-	| 'invalid-error-details';
+	| 'invalid-error-details'
+	| 'unsupported-version';
 
-/** An `error` makes the frame invalid; a `warning` does not. */
+/** An `error` makes the frame invalid or reports an invalid option; a `warning` does not. */
 export type FrameIssueSeverity = 'error' | 'warning';
 
 export interface FrameIssue {
@@ -56,7 +59,8 @@ export interface FrameIssue {
 export interface InspectFrameOptions {
 	/**
 	 * The OCPP version to check a CALLERROR error code against. Without it, any
-	 * string is accepted, as `parseFrame` does.
+	 * string is accepted, as `parseFrame` does. An unsupported value is reported
+	 * as an `unsupported-version` issue.
 	 */
 	readonly version?: OcppVersion;
 }
@@ -66,7 +70,10 @@ export interface FrameInspection {
 	readonly messageType?: MessageType;
 	/** The message ID, when it is a non-empty string. Use it to reply with a CALLERROR. */
 	readonly messageId?: MessageId;
-	/** Every problem found, in the order of the elements. Empty when the frame is valid. */
+	/**
+	 * Every problem found, in the order of the elements. It is empty when the
+	 * frame is valid and the options are valid.
+	 */
 	readonly issues: readonly FrameIssue[];
 }
 
@@ -109,14 +116,21 @@ function kindOf(items: readonly unknown[], index: number): string {
 }
 
 /** A short text for a value: its JSON when it is a primitive, otherwise its kind. */
-function show(items: readonly unknown[], index: number): string {
-	const value = items[index];
-	const kind = kindOf(items, index);
+function describeValue(value: unknown): string {
+	const kind = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
 	if (kind === 'string' || kind === 'number' || kind === 'boolean' || kind === 'null') {
 		const text = JSON.stringify(value);
 		return text.length > MAX_RECEIVED_LENGTH ? `${text.slice(0, MAX_RECEIVED_LENGTH - 1)}…` : text;
 	}
 	return kind;
+}
+
+/** A short text for a value: its JSON when it is a primitive, otherwise its kind. */
+function show(items: readonly unknown[], index: number): string {
+	if (index >= items.length) {
+		return 'missing';
+	}
+	return describeValue(items[index]);
 }
 
 /**
@@ -125,7 +139,8 @@ function show(items: readonly unknown[], index: number): string {
  * rules as `parseFrame`: a frame with no `error` issue is one that `parseFrame`
  * accepts. It adds a warning for a message ID longer than 36 characters, and,
  * when `version` is given, checks the CALLERROR error code against that version.
- * It does not check payloads against a schema, and it never throws.
+ * It does not check payloads against a schema, and it never throws. An
+ * unsupported `version` option is reported as an `unsupported-version` issue.
  */
 export function inspectFrame(frame: unknown, options: InspectFrameOptions = {}): FrameInspection {
 	const issues: FrameIssue[] = [];
@@ -139,6 +154,17 @@ export function inspectFrame(frame: unknown, options: InspectFrameOptions = {}):
 	): void => {
 		issues.push({ code, severity, path, message, expected, received });
 	};
+	const requestedVersion = options.version;
+	const version = isOcppVersion(requestedVersion) ? requestedVersion : undefined;
+	if (requestedVersion !== undefined && version === undefined) {
+		add(
+			'unsupported-version',
+			[],
+			'The version option is not a supported OCPP version',
+			`one of ${OCPP_VERSIONS.join(', ')}`,
+			describeValue(requestedVersion),
+		);
+	}
 
 	if (!Array.isArray(frame)) {
 		add(
@@ -237,12 +263,12 @@ export function inspectFrame(frame: unknown, options: InspectFrameOptions = {}):
 		const code = items[2];
 		if (typeof code !== 'string') {
 			add('invalid-error-code', [2], 'The error code must be a string', 'string', show(items, 2));
-		} else if (options.version !== undefined && !isErrorCode(options.version, code)) {
+		} else if (version !== undefined && !isErrorCode(version, code)) {
 			add(
 				'unknown-error-code',
 				[2],
-				`The error code is not defined for OCPP ${options.version}`,
-				`an OCPP ${options.version} error code`,
+				`The error code is not defined for OCPP ${version}`,
+				`an OCPP ${version} error code`,
 				show(items, 2),
 			);
 		}

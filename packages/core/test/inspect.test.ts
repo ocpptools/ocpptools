@@ -318,6 +318,38 @@ describe('inspectFrame with CALLERROR frames', () => {
 	});
 });
 
+describe('inspectFrame with an unsupported version', () => {
+	it('reports the option and keeps the frame identity', () => {
+		const inspection = inspectFrame([4, 'id-1', 'FormatViolation', '', {}], {
+			version: '2.1.0' as never,
+		});
+		expect(inspection.messageType).toBe(4);
+		expect(inspection.messageId).toBe('id-1');
+		expect(inspection.issues).toEqual([
+			{
+				code: 'unsupported-version',
+				severity: 'error',
+				path: [],
+				message: 'The version option is not a supported OCPP version',
+				expected: 'one of 1.6, 2.0.1',
+				received: '"2.1.0"',
+			},
+		]);
+	});
+
+	it('reports the option even when the frame is malformed', () => {
+		const inspection = inspectFrame('not a frame', { version: '2.1.0' as never });
+		expect(codes(inspection.issues)).toEqual(['unsupported-version', 'not-array']);
+	});
+
+	it('does not apply an unknown version to error-code checks', () => {
+		const inspection = inspectFrame([4, 'id-1', 'FooError', '', {}], {
+			version: '2.1.0' as never,
+		});
+		expect(codes(inspection.issues)).toEqual(['unsupported-version']);
+	});
+});
+
 describe('inspectFrame details', () => {
 	it('shortens a long value', () => {
 		const received = inspectFrame([4, 'id', 'x'.repeat(100), 'text', {}], { version: '1.6' })

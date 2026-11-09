@@ -52,6 +52,7 @@ const packages = [
 			'isCallError',
 			'isCallResult',
 			'isErrorCode',
+			'isOcppVersion',
 			'parseFrame',
 			'serializeFrame',
 		],
@@ -66,9 +67,15 @@ assert.deepEqual(serialized, { ok: true, value: text });
 assert.equal(pkg.parseFrame('[9]').error.kind, 'unknown-message-type');
 assert.ok(pkg.isErrorCode('1.6', 'FormationViolation'));
 assert.ok(!pkg.isErrorCode('2.0.1', 'FormationViolation'));
+assert.ok(pkg.isOcppVersion('2.0.1'));
+assert.ok(!pkg.isOcppVersion('2.1.0'));
 assert.equal(pkg.createMessageIdGenerator()().length, 36);
 
 assert.deepEqual(pkg.inspectFrame([2, 'id', 'Heartbeat', {}]), { messageType: 2, messageId: 'id', issues: [] });
+assert.deepEqual(
+	pkg.inspectFrame([4, 'id', 'FooError', '', {}], { version: '2.1.0' }).issues.map((issue) => issue.code),
+	['unsupported-version'],
+);
 assert.deepEqual(
 	pkg.inspectFrame([2, '', '', []], { version: '2.0.1' }).issues.map((issue) => issue.code),
 	['invalid-message-id', 'invalid-action', 'invalid-payload'],

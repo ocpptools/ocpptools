@@ -345,6 +345,11 @@ describe('simulate command', () => {
 			url: 'ws://127.0.0.1:1/CP001',
 			station: {},
 		});
+		const badVersion201 = await configFile({
+			version: '2.1.0',
+			url: 'ws://127.0.0.1:1/CP001',
+			station: {},
+		});
 		const missingVendor = await configFile({
 			version: '1.6',
 			url: 'ws://127.0.0.1:1/CP001',
@@ -359,6 +364,7 @@ describe('simulate command', () => {
 
 		for (const args of [
 			['simulate', '--config', badVersion, '--scenario', scenario],
+			['simulate', '--config', badVersion201, '--scenario', scenario],
 			['simulate', '--config', missingVendor, '--scenario', scenario],
 			['simulate', '--config', validConfig, '--scenario', badScenario],
 		]) {
@@ -366,6 +372,26 @@ describe('simulate command', () => {
 			await expect(runCli(args, captured.io), args.join(' ')).resolves.toBe(2);
 			expect(captured.stderr()).not.toBe('');
 		}
+	});
+
+	it('rejects an OCPP 2.1.0 config with a clear message', async () => {
+		const config = await configFile({
+			version: '2.1.0',
+			url: 'ws://127.0.0.1:1/CP001',
+			station: {
+				id: 'CP001',
+				vendorName: 'Acme',
+				model: 'AC-22',
+				firmwareVersion: '2.0.0',
+			},
+		});
+		const scenario = await scenarioFile(STEPS);
+		const captured = captureIo();
+		await expect(
+			runCli(['simulate', '--config', config, '--scenario', scenario], captured.io),
+		).resolves.toBe(2);
+		expect(captured.stderr()).toContain('config.version must be "1.6" or "2.0.1"');
+		expect(captured.stdout()).toBe('');
 	});
 
 	it('reports a connection failure with exit code 3', async () => {
@@ -475,6 +501,7 @@ describe('simulator config and scenario checks', () => {
 		const cases: unknown[] = [
 			null,
 			{ ...base, version: '2.1' },
+			{ ...base, version: '2.1.0' },
 			{ ...base, url: '' },
 			{ ...base, url: 'not a url' },
 			{ ...base, url: 'https://example.com/ocpp' },
@@ -520,6 +547,18 @@ describe('simulator config and scenario checks', () => {
 		for (const value of cases) {
 			expect(() => parseSimulatorConfig(value), JSON.stringify(value)).toThrow();
 		}
+		expect(() =>
+			parseSimulatorConfig({
+				...base,
+				version: '2.1.0',
+				station: {
+					id: 'CP001',
+					vendorName: 'Acme',
+					model: 'AC-22',
+					firmwareVersion: '2.0.0',
+				},
+			}),
+		).toThrow('config.version must be "1.6" or "2.0.1"');
 	});
 
 	it('rejects malformed scenarios', () => {

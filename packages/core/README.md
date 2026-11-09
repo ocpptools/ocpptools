@@ -39,6 +39,12 @@ for each message type, that the message ID and action are non-empty strings,
 and that payloads are JSON objects. It does not check a payload against an
 action's schema.
 
+Frames are structurally identical across OCPP versions, so `parseFrame` and
+`serializeFrame` are intentionally version-agnostic. Rejection of an unsupported
+version, such as OCPP 2.1.0, happens at the version-aware boundary: the
+validator, the simulator, or the CLI. Use `isOcppVersion` to validate a value
+that comes from JavaScript or configuration.
+
 When a frame is rejected but its message ID could be read, `error.messageId` is
 set, so you can answer with a CALLERROR.
 
@@ -60,7 +66,8 @@ empty for the whole frame), a `message`, and short `expected` and `received`
 texts. It applies the same rules as `parseFrame`: a frame without `error` issues
 is one that `parseFrame` accepts. It also warns about a message ID longer than
 36 characters (`MAX_MESSAGE_ID_LENGTH`), and with a `version` it checks a
-CALLERROR error code against that version's codes.
+CALLERROR error code against that version's codes. An unsupported `version`
+option is reported as an `unsupported-version` issue instead of throwing.
 
 ## Serialize a frame
 
@@ -114,15 +121,18 @@ errata sheet (2025-04) lists it, and `FormationViolation`, as known typos and
 chooses not to fix them, because that would change messages on the wire.
 
 ```ts
-import { OCPP_ERROR_CODES, isErrorCode } from '@ocpptools/core';
+import { OCPP_ERROR_CODES, isErrorCode, isOcppVersion } from '@ocpptools/core';
 
 isErrorCode('1.6', 'FormationViolation'); // true
 isErrorCode('2.0.1', 'FormationViolation'); // false
+isErrorCode('2.1.0' as never, 'GenericError'); // false, does not throw
+isOcppVersion('2.0.1'); // true
 OCPP_ERROR_CODES['2.0.1']; // every 2.0.1 code
 ```
 
 `parseFrame` accepts any error code in a CALLERROR, because a peer can send a
-code outside the specified set. Use `isErrorCode` to check it.
+code outside the specified set. Use `isErrorCode` to check it. An unsupported
+version returns `false` rather than throwing.
 
 ## Transport, Clock, and Storage
 

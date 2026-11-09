@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Rodolfo Carrillo
 
-import type { OcppVersion } from '@ocpptools/core';
+import { isOcppVersion, type OcppVersion } from '@ocpptools/core';
 
 import type { PayloadKind, SchemaRegistry } from './types.js';
+import { assertOcppVersion } from './version.js';
 
 const ACTION = /^[A-Za-z0-9]+$/;
 
@@ -11,15 +12,15 @@ const ACTION = /^[A-Za-z0-9]+$/;
  * The file name the official schema packages use for the schema of an action.
  * OCPP 1.6J: `Action.json` and `ActionResponse.json`. OCPP 2.0.1:
  * `ActionRequest.json` and `ActionResponse.json`. Returns `undefined` when
- * `action` is not made of letters and digits, so it can never point outside a
- * directory of schemas.
+ * `action` is not made of letters and digits, or when `version` is not
+ * supported, so it can never point outside a directory of schemas.
  */
 export function schemaFileName(
 	version: OcppVersion,
 	action: string,
 	kind: PayloadKind,
 ): string | undefined {
-	if (typeof action !== 'string' || !ACTION.test(action)) {
+	if (!isOcppVersion(version) || typeof action !== 'string' || !ACTION.test(action)) {
 		return undefined;
 	}
 	if (kind === 'response') {
@@ -61,10 +62,12 @@ export interface SchemaRegistryOptions {
 /**
  * Builds a registry on top of a function that loads schema files. Each file is
  * loaded once; a failed load is not remembered, so the next call tries again.
- * It knows no schema and no action, so it adds nothing to a bundle.
+ * It knows no schema and no action, so it adds nothing to a bundle. It throws
+ * when `version` is not supported.
  */
 export function createSchemaRegistry(options: SchemaRegistryOptions): SchemaRegistry {
 	const { version, load } = options;
+	assertOcppVersion(version);
 	const files = options.files === undefined ? undefined : new Set(options.files);
 	const loading = new Map<string, Promise<unknown>>();
 

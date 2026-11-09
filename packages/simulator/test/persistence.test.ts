@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Simulator16 } from '../src/1.6.js';
 import { Simulator201 } from '../src/2.0.1.js';
+import { validateSnapshot } from '../src/persistence.js';
 import { FakeClock, flushMicrotasks } from './helpers/fake-clock.js';
 import { FakeTransportFactory, type FakeTransport } from './helpers/fake-transport.js';
 import { MemoryStorage } from './helpers/memory-storage.js';
@@ -369,6 +370,25 @@ describe('persistence', () => {
 		second.simulator.dispose();
 	});
 
+	it('rejects an unsupported snapshot protocol explicitly', () => {
+		expect(() => validateSnapshot({ snapshotVersion: 1, protocol: '2.1.0' }, '2.0.1')).toThrow(
+			'Unsupported snapshot protocol: 2.1.0',
+		);
+		expect(() => validateSnapshot({ snapshotVersion: 1, protocol: '1.6' }, '2.0.1')).toThrow(
+			'The snapshot protocol 1.6 does not match 2.0.1',
+		);
+	});
+
+	it('surfaces an unsupported protocol through restoreSnapshot', () => {
+		const storage = new MemoryStorage();
+		const { simulator } = create16(storage);
+		const result = simulator.restoreSnapshot({ snapshotVersion: 1, protocol: '2.1.0' });
+		expect(result.restored).toBe(false);
+		expect(result.error?.code).toBe('invalid-snapshot');
+		expect(result.error?.cause).toContain('Unsupported snapshot protocol: 2.1.0');
+		simulator.dispose();
+	});
+
 	it('rejects invalid snapshots without throwing or mutating state', () => {
 		const storage = new MemoryStorage();
 		const { simulator } = create16(storage);
@@ -385,6 +405,7 @@ describe('persistence', () => {
 			{},
 			{ snapshotVersion: 2, protocol: '1.6', savedAt: 0, config: {}, state: {}, queue: {} },
 			{ snapshotVersion: 1, protocol: '2.0.1', savedAt: 0, config: {}, state: {}, queue: {} },
+			{ snapshotVersion: 1, protocol: '2.1.0', savedAt: 0, config: {}, state: {}, queue: {} },
 			{
 				snapshotVersion: 1,
 				protocol: '1.6',

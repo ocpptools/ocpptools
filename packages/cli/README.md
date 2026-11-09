@@ -39,6 +39,8 @@ ocpptools validate - --version 1.6 < frame.json
 
 `validate` reads one JSON file, or standard input with `-`. It validates the
 frame structure and the payload against the official schema of the action.
+`--version` accepts `1.6` and `2.0.1`; OCPP 2.1.0 is deferred and exits with
+code `2` instead of loading a schema.
 
 A CALLRESULT does not name its action. Pass the request action so its payload is
 checked instead of only warned about:
@@ -137,7 +139,8 @@ For OCPP 1.6, the station shape is:
 ```
 
 `station.id`, `url`, and `version` are required. The station fields required by
-the chosen version must be present. All other sections are optional.
+the chosen version must be present. All other sections are optional. The config
+`version` accepts `1.6` and `2.0.1`; OCPP 2.1.0 exits with code `2`.
 
 - `boot` defaults to `{ "auto": false, "required": true, "retryOnPending": false }`.
   The CLI sends `BootNotification` only when a scenario has a `boot` step unless
