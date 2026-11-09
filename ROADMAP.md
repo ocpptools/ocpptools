@@ -45,13 +45,15 @@ parity against the live site validators. It is published with `core` and
 
 Extract `@ocpptools/simulator` as a headless protocol engine. Split the current
 DOM-coupled website code into RPC, connection, state, protocol flows, and
-transport adapters. Browser transport lives in a subpath; the Node adapter comes
-with the CLI. Validate against a mock CSMS.
+transport adapters. Browser and Node transports live in separate subpaths. The
+Node adapter is delivered at the start of Phase 7; the CLI follows. Validate
+against a mock CSMS.
 
 Status: implemented for all 28 OCPP 1.6J actions and all 64 OCPP 2.0.1 actions,
 with the browser adapter, schema-valid action matrices, fault injection,
 outbound validation, metrics, scenarios, snapshots, completed 1.6 semantics,
-and hardened 2.0.1 features. 0.2.0 is published. The site UI migration remains.
+and hardened 2.0.1 features. 0.2.0 is published. The Node adapter is the first
+piece of Phase 7, and the site UI migration remains.
 
 ## Phase 5 — Builder
 
@@ -65,11 +67,13 @@ Create `@ocpptools/testing` only if external users ask for it: mock CSMS,
 in-memory transport, frame factories, and fixtures. Fixtures must not include
 copies or adaptations of the OCPP schemas.
 
-## Phase 7 — Kit and CLI
+## Phase 7 — Node adapter, kit, and CLI
 
-Create `@ocpptools/kit` and the `ocpptools` CLI only after the earlier packages
-are stable. `kit` uses explicit exports, not indiscriminate `export *`. The CLI
-is published last and must be functional, not a placeholder.
+Start with the Node adapter in `@ocpptools/simulator/node`, then create
+`@ocpptools/kit` and the `ocpptools` CLI only after the earlier packages are
+stable. `kit` uses explicit exports, not indiscriminate `export *`. The CLI
+consumes the Node adapter, is published last, and must be functional, not a
+placeholder.
 
 ## Phase 8 — Launch
 

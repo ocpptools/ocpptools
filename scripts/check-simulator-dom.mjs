@@ -2,8 +2,9 @@
 // SPDX-FileCopyrightText: 2026 Rodolfo Carrillo
 
 // The simulator engine must stay usable without a DOM or Node APIs. This check
-// walks every built engine module and fails when a browser global or an ambient
-// timer leaks into one of them. The browser adapter is excluded on purpose.
+// walks every built engine module and fails when a browser global, a Node
+// built-in, or an ambient timer leaks into one of them. The browser and Node
+// adapters are excluded on purpose.
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -16,6 +17,8 @@ const distDir = join(packageDir, 'dist');
 if (!existsSync(distDir)) {
 	throw new Error('packages/simulator/dist is missing; run pnpm build first');
 }
+
+const nodeBuiltinPattern = /(?:from\s*|import\s*\(?\s*)['"]node:[^'"]+['"]/;
 
 const forbidden = [
 	['document', /\bdocument\s*[.[]/],
@@ -40,7 +43,7 @@ function filesIn(directory) {
 	for (const entry of readdirSync(directory, { withFileTypes: true })) {
 		const path = join(directory, entry.name);
 		if (entry.isDirectory()) {
-			if (entry.name !== 'browser') {
+			if (entry.name !== 'browser' && entry.name !== 'node') {
 				files.push(...filesIn(path));
 			}
 		} else if (entry.name.endsWith('.js')) {
@@ -53,6 +56,9 @@ function filesIn(directory) {
 for (const file of filesIn(distDir)) {
 	const relativeFile = relative(packageDir, file).replaceAll('\\', '/');
 	const text = stripComments(readFileSync(file, 'utf8'));
+	if (nodeBuiltinPattern.test(text)) {
+		throw new Error(`Simulator engine module ${relativeFile} imports a Node built-in`);
+	}
 	for (const [name, pattern] of forbidden) {
 		if (name === 'Math.random' && relativeFile === 'dist/random.js') {
 			continue;
@@ -66,4 +72,6 @@ for (const file of filesIn(distDir)) {
 	}
 }
 
-console.log('Simulator engine is free of DOM, ambient time, and ambient randomness.');
+console.log(
+	'Simulator engine is free of DOM, Node built-ins, ambient time, and ambient randomness.',
+);

@@ -7,6 +7,6 @@
     "types": []
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/browser", "test", "dist", "coverage"],
+  "exclude": ["src/browser", "src/node", "test", "dist", "coverage"],
   "references": [{ "path": "../core/tsconfig.build.json" }]
 }

@@ -26,12 +26,13 @@ browser.
 | `@ocpptools/simulator/1.6`     | `Simulator16`, `createSimulator16`, the 1.6J profile and state types    |
 | `@ocpptools/simulator/2.0.1`   | `Simulator201`, `createSimulator201`, the 2.0.1 profile and state types |
 | `@ocpptools/simulator/browser` | WebSocket transport factory, browser clock, Web Storage adapter         |
+| `@ocpptools/simulator/node`    | Node WebSocket transport factory, Node clock, memory and file storage   |
 
 The version subpaths fix the protocol version. Importing any runtime symbol
 from the root loads both profile modules because the root exports the
 `createSimulator` factory; use a version subpath to load only one protocol. The
-browser entry contains no protocol profile and the engine entries contain no
-DOM code.
+browser and Node entries contain no protocol profile, and the engine entries
+contain no DOM or Node APIs.
 
 ## Factories
 
@@ -107,6 +108,30 @@ simulator.connect();
 With OCPP 1.6, import `Simulator16` from `@ocpptools/simulator/1.6` and use
 `station: { id, vendor, model, firmwareVersion, connectorCount }`.
 
+## Node quick start
+
+```ts
+import { createNodeWebSocketTransportFactory, nodeClock } from '@ocpptools/simulator/node';
+import { Simulator201 } from '@ocpptools/simulator/2.0.1';
+
+const simulator = new Simulator201({
+  url: 'wss://csms.example.com/CP001',
+  transport: createNodeWebSocketTransportFactory(),
+  clock: nodeClock,
+  station: {
+    id: 'CP001',
+    vendorName: 'Acme',
+    model: 'AC-22',
+    firmwareVersion: '2.0.0',
+  },
+});
+
+simulator.connect();
+```
+
+The Node transport uses the built-in `WebSocket` from Node 22.12 and later.
+Import `Simulator16` from `@ocpptools/simulator/1.6` for OCPP 1.6J.
+
 ## Injectable environment
 
 The profile classes require:
@@ -121,8 +146,10 @@ Optional:
 - `messageIds`: a `MessageIdGenerator`.
 - `random`: a deterministic source for lab features.
 
-The browser entry also provides `createWebStorage(localStorage)` for consumers
-that wire their own persistence.
+The browser entry provides `createWebStorage(localStorage)` for consumers that
+wire their own persistence. The Node entry provides `createMemoryStorage()` and
+`createFileStorage(directory)`, which stores one SHA-256-named file per key and
+writes atomically.
 
 ## Lifecycle
 
@@ -321,6 +348,9 @@ const snapshot = simulator.exportSnapshot();
 const result = simulator.restoreSnapshot(snapshot);
 ```
 
+In Node, use `createFileStorage('./state')` or `createMemoryStorage()` instead
+of the Web Storage adapter.
+
 `load()`, `save()`, and `restoreSnapshot()` never throw for expected storage or
 snapshot failures; they return `LoadResult`, `SaveResult`, or `RestoreResult`
 with an error snapshot. Invalid snapshots are rejected before state changes.
@@ -358,11 +388,14 @@ are never merged.
 
 ## Limits
 
-- No Node transport in this package. It comes with the CLI.
+- The Node adapter uses the portable built-in `WebSocket`. The factory only
+  sets the URL and subprotocol, so custom headers and mutual TLS require a
+  wrapper or subclass that captures the `ws` options you need and is passed as
+  the injected constructor.
 - No real cryptography, 15118 stack, firmware flashing, or log upload.
 - No hardware model or physical connector tree.
-- The browser adapter uses the injected `WebSocket`; it does not retry by
-  itself. Reconnection belongs to the engine.
+- The browser and Node adapters use the injected `WebSocket`; they do not retry
+  by themselves. Reconnection belongs to the engine.
 - `storage` is optional and the caller owns persistence policy and secrets such
   as credentials in URLs.
 

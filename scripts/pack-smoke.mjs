@@ -356,12 +356,15 @@ assert.equal(typeof schemaUtils.normalizeSchema, 'function');
 			'dist/2.0.1.d.ts',
 			'dist/browser/index.js',
 			'dist/browser/index.d.ts',
+			'dist/node/index.js',
+			'dist/node/index.d.ts',
 		],
 		behavior: `
 assert.equal(pkg.SIMULATOR_NAME, '@ocpptools/simulator');
 const s16 = await import('@ocpptools/simulator/1.6');
 const s201 = await import('@ocpptools/simulator/2.0.1');
 const browser = await import('@ocpptools/simulator/browser');
+const node = await import('@ocpptools/simulator/node');
 assert.equal(s16.SIMULATOR_PROTOCOL_VERSION, '1.6');
 assert.equal(s201.SIMULATOR_PROTOCOL_VERSION, '2.0.1');
 assert.equal(typeof s16.Simulator16, 'function');
@@ -372,11 +375,36 @@ assert.equal(typeof pkg.createSimulator, 'function');
 assert.equal(typeof browser.createWebSocketTransportFactory, 'function');
 assert.equal(typeof browser.browserClock.now, 'function');
 assert.equal(typeof browser.createWebStorage, 'function');
+assert.equal(typeof node.createNodeWebSocketTransportFactory, 'function');
+assert.equal(typeof node.nodeClock.now, 'function');
+assert.equal(typeof node.createMemoryStorage, 'function');
+assert.equal(typeof node.createFileStorage, 'function');
+const memory = node.createMemoryStorage();
+await memory.set('cp001', '{"ready":true}');
+assert.equal(await memory.get('cp001'), '{"ready":true}');
+await memory.delete('cp001');
+assert.equal(await memory.get('cp001'), undefined);
+const { mkdtemp, rm } = await import('node:fs/promises');
+const { tmpdir } = await import('node:os');
+const { join } = await import('node:path');
+const directory = await mkdtemp(join(tmpdir(), 'ocpptools-simulator-'));
+try {
+	const files = node.createFileStorage(directory);
+	await files.set('cp001', '{"ready":true}');
+	assert.equal(await files.get('cp001'), '{"ready":true}');
+	await files.delete('cp001');
+	assert.equal(await files.get('cp001'), undefined);
+} finally {
+	await rm(directory, { recursive: true, force: true });
+}
 const { readFileSync } = await import('node:fs');
 const { createRequire } = await import('node:module');
 const require = createRequire(import.meta.url);
 const manifest = JSON.parse(readFileSync(require.resolve('@ocpptools/simulator/package.json'), 'utf8'));
-assert.deepEqual(Object.keys(manifest.exports).sort(), ['.', './1.6', './2.0.1', './browser', './package.json']);
+assert.deepEqual(Object.keys(manifest.exports).sort(), ['.', './1.6', './2.0.1', './browser', './node', './package.json']);
+for (const bucket of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
+	assert.ok(!Object.hasOwn(manifest[bucket] ?? {}, 'ws'), 'ws must not be a runtime dependency');
+}
 `,
 	},
 ];

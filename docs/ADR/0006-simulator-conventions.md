@@ -1,6 +1,6 @@
 # 0006. Simulator conventions
 
-- Status: accepted
+- Status: accepted; the Node-adapter clause and entrypoint list in point 1, and the build sentence in point 9, are superseded by [0007](0007-simulator-node-adapter.md)
 - Date: 2026-11-07
 
 ## Context

@@ -22,4 +22,9 @@ export default [
 		limit: '1 kB',
 		disablePlugins: ['@size-limit/esbuild'],
 	},
+	{
+		path: 'dist/node/index.js',
+		limit: '1 kB',
+		disablePlugins: ['@size-limit/esbuild'],
+	},
 ];
