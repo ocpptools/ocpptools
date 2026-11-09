@@ -1,6 +1,6 @@
 # 0009. Real cryptography and ISO 15118 scope
 
-- Status: accepted
+- Status: accepted; the reference-adapter parts are superseded by [0011](0011-no-reference-crypto-adapter.md)
 - Date: 2026-11-09
 
 ## Context
