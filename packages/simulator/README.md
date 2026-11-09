@@ -232,8 +232,12 @@ end dates. Station-level `Reset` stops transactions and reboots the transport;
 EVSE-scoped resets stop only that EVSE. `UnlockConnector` follows the
 specification and returns `OngoingAuthorizedTransaction` while a transaction is
 active instead of stopping it. The device-model catalog is curated, not the
-complete standard catalog (ADR 0008). OCPP 2.1.0 is deferred (ADR 0010). No
-feature claims conformance evidence.
+complete standard catalog (ADR 0008). It contains
+`OCPPCommCtrlr/HeartbeatInterval`, `AlignedDataCtrlr/Enabled`,
+`SampledDataCtrlr/TxUpdatedInterval`, and `DeviceDataCtrlr/Enabled`;
+`GetVariables`, `SetVariables`, monitoring, and reports ignore variables added
+outside it. OCPP 2.1.0 is deferred (ADR 0010). No feature claims conformance
+evidence.
 
 ### Security integration
 
@@ -414,8 +418,9 @@ are never merged.
   the injected constructor.
 - Real cryptography and 15118 are approved as an opt-in phase (ADR 0009) but
   are not shipped yet. No firmware flashing or log upload.
-- The device-model catalog is curated (ADR 0008), and OCPP 2.1.0 is deferred
-  (ADR 0010).
+- The device-model catalog is curated to four variables (ADR 0008), and OCPP
+  2.1.0 is deferred (ADR 0010). Protocol actions and reports ignore variables
+  outside the catalog.
 - No hardware model or physical connector tree.
 - The browser and Node adapters use the injected `WebSocket`; they do not retry
   by themselves. Reconnection belongs to the engine.

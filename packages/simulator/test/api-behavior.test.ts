@@ -266,15 +266,15 @@ describe('simulator API behavior', () => {
 		expect(report?.payload).not.toHaveProperty('reportData');
 
 		transport.sent.length = 0;
-		simulator.state.variables['Heartbeat/Interval'] = '60';
+		simulator.state.variables['SampledDataCtrlr/TxUpdatedInterval'] = '45';
 		await simulator.deviceModel.sendReport({ requestId: 4 });
 		report = sentCalls(transport).find((call) => call.action === 'NotifyReport');
 		const reportData = report?.payload['reportData'] as unknown[];
-		expect(reportData).toHaveLength(5);
+		expect(reportData).toHaveLength(4);
 		expect(reportData).toContainEqual({
-			component: { name: 'Heartbeat' },
-			variable: { name: 'Interval' },
-			variableAttribute: [{ type: 'Actual', value: '60', mutability: 'ReadWrite' }],
+			component: { name: 'SampledDataCtrlr' },
+			variable: { name: 'TxUpdatedInterval' },
+			variableAttribute: [{ type: 'Actual', value: '45', mutability: 'ReadWrite' }],
 			variableCharacteristics: { dataType: 'integer', supportsMonitoring: true },
 		});
 		simulator.dispose();
@@ -289,8 +289,8 @@ describe('simulator API behavior', () => {
 		transport.sent.length = 0;
 		simulator.state.monitoring.monitors.push({
 			id: 1,
-			component: { name: 'SampledData' },
-			variable: { name: 'Power' },
+			component: { name: 'SampledDataCtrlr' },
+			variable: { name: 'TxUpdatedInterval' },
 			value: 100,
 			type: 'UpperThreshold',
 			severity: 3,
@@ -302,8 +302,8 @@ describe('simulator API behavior', () => {
 		const report = sentCalls(transport).find((call) => call.action === 'NotifyMonitoringReport');
 		expect(report?.payload['monitor']).toEqual([
 			{
-				component: { name: 'SampledData' },
-				variable: { name: 'Power' },
+				component: { name: 'SampledDataCtrlr' },
+				variable: { name: 'TxUpdatedInterval' },
 				variableMonitoring: [
 					{
 						id: 1,

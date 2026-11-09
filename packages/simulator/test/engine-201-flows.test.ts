@@ -696,18 +696,17 @@ describe('Simulator201 inbound commands', () => {
 			}),
 		).toEqual({ status: 'EmptyResultSet' });
 		harness.simulator.state.variables = { LooseVariable: 'x' };
-		await call(harness, 'report-6', 'GetBaseReport', {
-			requestId: 4,
-			reportBase: 'FullInventory',
-		});
-		const lastNotify = harness
-			.calls('NotifyReport')
-			.map((frame) => frame[3] as Record<string, unknown>)
-			.at(-1);
-		expect((lastNotify?.['reportData'] as Array<Record<string, unknown>>)[0]).toMatchObject({
-			component: { name: 'LooseVariable' },
-			variable: { name: 'LooseVariable' },
-		});
+		expect(
+			await call(harness, 'report-6', 'GetBaseReport', {
+				requestId: 4,
+				reportBase: 'FullInventory',
+			}),
+		).toEqual({ status: 'EmptyResultSet' });
+		expect(
+			harness
+				.calls('NotifyReport')
+				.filter((frame) => (frame[3] as Record<string, unknown>)['requestId'] === 4),
+		).toHaveLength(0);
 	});
 
 	it('builds reports before boot and queues NotifyReport', async () => {
