@@ -63,6 +63,25 @@ importers:
         specifier: ^4.1.12
         version: 4.1.12(@types/node@26.6.6)(@vitest/coverage-v8@4.1.12)(vite@7.3.7(@types/node@26.6.6)(jiti@2.7.0)(yaml@2.9.1))
 
+  packages/builder:
+    dependencies:
+      '@ocpptools/core':
+        specifier: workspace:^
+        version: link:../core
+      '@ocpptools/schema-utils':
+        specifier: workspace:^
+        version: link:../schema-utils
+    devDependencies:
+      '@ocpptools/schemas':
+        specifier: workspace:*
+        version: link:../schemas
+      '@ocpptools/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@ocpptools/validator':
+        specifier: workspace:*
+        version: link:../validator
+
   packages/cli:
     dependencies:
       '@ocpptools/core':

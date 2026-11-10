@@ -1,6 +1,6 @@
 # 0002. schema-utils conventions
 
-- Status: accepted
+- Status: accepted; the clause in point 9 that puts `@ocpptools/builder` in the fixed version group, and the consequence that the version of `@ocpptools/schema-utils` is tied to `builder` through that group, are superseded by [0013](0013-builder-api.md)
 - Date: 2026-11-01
 
 ## Context
