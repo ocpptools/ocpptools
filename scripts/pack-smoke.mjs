@@ -194,6 +194,67 @@ assert.ok(license.startsWith('Attribution-NoDerivatives 4.0 International'));
 `,
 	},
 	{
+		directory: 'builder',
+		name: '@ocpptools/builder',
+		workspaceDependencies: ['core', 'schema-utils'],
+		exports: ['createBuilder'],
+		behavior: `
+const manifest = (
+	await import('@ocpptools/builder/package.json', { with: { type: 'json' } })
+).default;
+for (const name of ['@ocpptools/schemas', '@ocpptools/validator', 'ajv', 'ajv-formats']) {
+	assert.equal(manifest.dependencies?.[name], undefined);
+	assert.equal(manifest.peerDependencies?.[name], undefined);
+}
+assert.equal(manifest.name, '@ocpptools/builder');
+const schema = {
+	type: 'object',
+	required: ['value'],
+	properties: {
+		value: { type: 'string' },
+		enabled: { type: 'boolean', default: true },
+	},
+};
+const builder = pkg.createBuilder({
+	version: '2.0.1',
+	schemas: {
+		get: (action, kind) =>
+			action === 'Example'
+				? kind === 'request'
+					? schema
+					: { type: 'object', required: ['status'], properties: { status: { type: 'string' } } }
+				: undefined,
+	},
+	messageIds: () => 'id-1',
+});
+const payload = await builder.buildPayload('Example', { value: 'x' });
+assert.deepEqual(payload, {
+	ok: true,
+	value: { value: 'x', enabled: true },
+	warnings: [],
+});
+const call = await builder.buildCall('Example', { value: 'x' });
+assert.deepEqual(call, {
+	ok: true,
+	value: [2, 'id-1', 'Example', { value: 'x', enabled: true }],
+	warnings: [],
+});
+const serialized = builder.serialize(call.value);
+assert.equal(serialized.ok, true);
+assert.equal(serialized.value, '[2,"id-1","Example",{"value":"x","enabled":true}]');
+assert.deepEqual(builder.buildError('id-2', 'FormatViolation', 'bad'), {
+	ok: true,
+	value: [4, 'id-2', 'FormatViolation', 'bad', {}],
+	warnings: [],
+});
+assert.deepEqual((await builder.fields('Example')).value.children.map((field) => field.name), [
+	'value',
+	'enabled',
+]);
+assert.deepEqual((await builder.listActions()).value, []);
+`,
+	},
+	{
 		directory: 'validator',
 		name: '@ocpptools/validator',
 		workspaceDependencies: ['core', 'schema-utils'],

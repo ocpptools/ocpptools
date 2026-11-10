@@ -11,6 +11,7 @@
     "packages/core/src/**/*.ts",
     "packages/schema-utils/src/**/*.ts",
     "packages/validator/src/**/*.ts",
+    "packages/builder/src/**/*.ts",
     "packages/simulator/src/**/*.ts",
     "packages/cli/src/**/*.ts"
   ]

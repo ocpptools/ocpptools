@@ -1,0 +1,19 @@
+{
+  "extends": "@ocpptools/tsconfig/library.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "incremental": false,
+    "types": [],
+    "paths": {
+      "@ocpptools/core": ["../core/src/index.ts"],
+      "@ocpptools/schema-utils": ["../schema-utils/src/index.ts"],
+      "@ocpptools/validator": ["../validator/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "exclude": ["dist", "coverage"]
+}
