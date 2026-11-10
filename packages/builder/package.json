@@ -1,7 +1,6 @@
 {
   "name": "@ocpptools/builder",
-  "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "description": "Headless schema-driven OCPP-J payload and frame builder.",
   "license": "Apache-2.0",

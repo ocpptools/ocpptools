@@ -52,15 +52,18 @@ against a mock CSMS.
 Status: implemented for all 28 OCPP 1.6J actions and all 64 OCPP 2.0.1 actions,
 with the browser adapter, schema-valid action matrices, fault injection,
 outbound validation, metrics, scenarios, snapshots, completed 1.6 semantics,
-and hardened 2.0.1 features. 0.2.0 is published. The Node adapter and the
-`ocpptools` CLI are the first pieces of Phase 7, and the site UI migration
-remains.
+and hardened 2.0.1 features. 0.4.0 is published. The Node adapter and the
+`ocpptools` CLI are published, and the site UI migration is complete.
 
 ## Phase 5 — Builder
 
 Extract `@ocpptools/builder` as a headless schema-driven message constructor.
 Remove UI and Tailwind presets from the model. If the split cannot be done
 cleanly, the builder stays internal and is not published.
+
+Status: the headless split is clean. `@ocpptools/builder` 0.1.0 is published;
+the website keeps its DOM, form state, examples, and Tailwind presets. See
+ADR 0013.
 
 ## Phase 6 — Testing utilities
 
@@ -76,11 +79,10 @@ earlier packages are stable and real consumers ask for it. `kit` uses explicit
 exports, not indiscriminate `export *`. The CLI must stay functional, not a
 placeholder.
 
-Status: the Node adapter and the `ocpptools` CLI are implemented and tested.
-The CLI validates frames with `@ocpptools/validator` and runs simulator
-scenarios against a CSMS. Its first npm publish is pending permission for the
-unscoped `ocpptools` name; the package stays in the workspace until that is
-resolved. `@ocpptools/kit` remains.
+Status: the Node adapter and the `ocpptools` CLI are implemented, tested, and
+published (CLI 0.1.1). The CLI validates frames with `@ocpptools/validator` and
+runs simulator scenarios against a CSMS. `@ocpptools/kit` remains and is
+created only with a real consumer.
 
 ## Phase 8 — Real cryptography and ISO 15118
 
