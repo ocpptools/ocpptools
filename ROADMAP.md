@@ -67,9 +67,16 @@ ADR 0013.
 
 ## Phase 6 — Testing utilities
 
-Create `@ocpptools/testing` only if external users ask for it: mock CSMS,
-in-memory transport, frame factories, and fixtures. Fixtures must not include
-copies or adaptations of the OCPP schemas.
+Publish `@ocpptools/testing` only if external users ask for it: mock CSMS,
+in-memory transport, frame factories, and fixtures. An unpublished
+implementation may be maintained as readiness work; it is not supported and
+carries no compatibility promise. Fixtures must not include copies or
+adaptations of the OCPP schemas.
+
+Status: implemented privately (`private: true`, `0.0.0`) at the maintainer's
+request; the package is not published. Publication requires a named external
+consumer, a concrete use case, acceptance of the alpha API, and maintainer
+approval recorded here. See [ADR 0014](docs/ADR/0014-testing-utilities.md).
 
 ## Phase 7 — Node adapter, kit, and CLI
 

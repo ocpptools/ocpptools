@@ -36,10 +36,12 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm typecheck:test
       - run: pnpm test:coverage
+      - run: pnpm test:coverage:testing
       - run: pnpm build
       - run: pnpm bundle:check
       - run: pnpm lint:packages
       - run: pnpm test:pack
+      - run: pnpm docs:api
       - run: pnpm size
 
   reuse:

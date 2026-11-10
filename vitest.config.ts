@@ -20,6 +20,9 @@ export default defineConfig({
 			'@ocpptools/builder': fileURLToPath(
 				new URL('packages/builder/src/index.ts', import.meta.url),
 			),
+			'@ocpptools/testing': fileURLToPath(
+				new URL('packages/testing/src/index.ts', import.meta.url),
+			),
 			// Subpaths go before the package root: Vite matches aliases by prefix.
 			'@ocpptools/simulator/browser': fileURLToPath(
 				new URL('packages/simulator/src/browser/index.ts', import.meta.url),
