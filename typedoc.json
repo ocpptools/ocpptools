@@ -5,6 +5,7 @@
     "packages/schema-utils/src/index.ts",
     "packages/validator/src/index.ts",
     "packages/builder/src/index.ts",
+    "packages/testing/src/index.ts",
     "packages/simulator/src/index.ts",
     "packages/simulator/src/1.6.ts",
     "packages/simulator/src/2.0.1.ts",

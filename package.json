@@ -19,8 +19,9 @@
   },
   "scripts": {
     "build": "tsc -b tsconfig.json",
-    "bundle:check": "node scripts/bundle-check.mjs && pnpm bundle:check:builder && pnpm bundle:check:simulator",
+    "bundle:check": "node scripts/bundle-check.mjs && pnpm bundle:check:builder && pnpm bundle:check:testing && pnpm bundle:check:simulator",
     "bundle:check:builder": "node scripts/builder-bundle-check.mjs",
+    "bundle:check:testing": "node scripts/testing-bundle-check.mjs",
     "bundle:check:simulator": "node scripts/simulator-bundle-check.mjs && node scripts/check-simulator-dom.mjs",
     "clean": "tsc -b --clean tsconfig.json",
     "lint": "eslint . --max-warnings=0",
@@ -30,6 +31,7 @@
     "typecheck:test": "pnpm -r --filter @ocpptools/* --filter ocpptools --if-present run typecheck:test",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:coverage:testing": "vitest run packages/testing/test --coverage --coverage.include=\"packages/testing/src/**/*.ts\" --coverage.thresholds.lines=90 --coverage.thresholds.functions=90 --coverage.thresholds.statements=90 --coverage.thresholds.branches=85",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "pnpm build && changeset publish",
@@ -38,7 +40,7 @@
     "lint:ai-files": "node scripts/check-no-ai-files.mjs",
     "lint:schemas": "node scripts/check-no-oca-schemas.mjs && node scripts/check-verbatim-schemas.mjs",
     "lint:licenses": "reuse lint",
-    "verify": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm typecheck:test && pnpm test:coverage && pnpm build && pnpm bundle:check && pnpm lint:packages && pnpm test:pack && pnpm size && pnpm lint:ai-files && pnpm lint:schemas && pnpm lint:licenses",
+    "verify": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm typecheck:test && pnpm test:coverage && pnpm test:coverage:testing && pnpm build && pnpm bundle:check && pnpm lint:packages && pnpm test:pack && pnpm docs:api && pnpm size && pnpm lint:ai-files && pnpm lint:schemas && pnpm lint:licenses",
     "docs:api": "typedoc",
     "size": "pnpm -r --filter @ocpptools/* --filter ocpptools --if-present run size"
   },

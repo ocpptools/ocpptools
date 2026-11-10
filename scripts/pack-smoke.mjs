@@ -194,6 +194,80 @@ assert.ok(license.startsWith('Attribution-NoDerivatives 4.0 International'));
 `,
 	},
 	{
+		directory: 'testing',
+		name: '@ocpptools/testing',
+		workspaceDependencies: ['core'],
+		allowedFile:
+			/^package\/(package\.json|README\.md|LICENSE|NOTICE|dist\/(?:[^/]+\/)*[^/]+\.(?:js|d\.ts|js\.map|d\.ts\.map))$/,
+		exports: [
+			'FakeClockError',
+			'FrameFactoryError',
+			'InMemoryTransportError',
+			'MockCsmsCallError',
+			'MockCsmsError',
+			'createFakeClock',
+			'createFrameFactory',
+			'createInMemoryTransportHub',
+			'createInMemoryTransportPair',
+			'createMockCsms',
+			'createSyntheticFixtures',
+			'flushMicrotasks',
+		],
+		behavior: `
+const manifest = (
+	await import('@ocpptools/testing/package.json', { with: { type: 'json' } })
+).default;
+for (const name of ['@ocpptools/schemas', '@ocpptools/validator', '@ocpptools/simulator', 'ajv', 'ajv-formats', 'ws']) {
+	assert.equal(manifest.dependencies?.[name], undefined);
+	assert.equal(manifest.peerDependencies?.[name], undefined);
+	assert.equal(manifest.optionalDependencies?.[name], undefined);
+}
+assert.equal(manifest.dependencies?.['@ocpptools/core'] !== undefined, true);
+assert.ok(manifest.private === true || manifest.version !== '0.0.0');
+
+const pair = pkg.createInMemoryTransportPair({ delivery: 'manual' });
+const csms = pkg.createMockCsms({
+	version: '2.0.1',
+	transport: pair.server,
+	handlers: { Example: () => ({ value: 'ok' }) },
+});
+const frames = pkg.createFrameFactory({ version: '2.0.1' });
+pair.link.open();
+pair.client.send(JSON.stringify(frames.call('Example', { value: 'x' })));
+await pair.link.flush();
+assert.equal(csms.calls.length, 1);
+assert.deepEqual(csms.results[0][2], { value: 'ok' });
+assert.equal(frames.call('Example', {})[1], 'msg-2');
+
+const fixtures = pkg.createSyntheticFixtures();
+assert.equal(fixtures.call()[2], 'Example');
+const fixturePayload = fixtures.payload();
+fixturePayload.value = 'changed';
+assert.equal(fixtures.payload().value, 'example');
+const clock = pkg.createFakeClock({ now: 0 });
+let ticked = false;
+clock.setTimeout(() => { ticked = true; }, 1);
+clock.advance(1);
+assert.equal(ticked, true);
+
+const hub = pkg.createInMemoryTransportHub();
+const client = hub.factory({ url: 'ws://in-memory/CP-1', subprotocol: 'ocpp1.6' });
+const factoryPair = await hub.nextPair();
+assert.equal(factoryPair.client, client);
+factoryPair.link.open();
+assert.equal(factoryPair.client.state, 'open');
+
+const { readFileSync, existsSync } = await import('node:fs');
+const { dirname, join } = await import('node:path');
+const { createRequire } = await import('node:module');
+const require = createRequire(import.meta.url);
+const packageFile = require.resolve('@ocpptools/testing/package.json');
+const notice = readFileSync(join(dirname(packageFile), 'NOTICE'), 'utf8');
+assert.equal(notice.includes('OCPP JSON Schemas'), false);
+assert.equal(existsSync(join(dirname(packageFile), 'LICENSE-CC-BY-ND-4.0.txt')), false);
+`,
+	},
+	{
 		directory: 'builder',
 		name: '@ocpptools/builder',
 		workspaceDependencies: ['core', 'schema-utils'],

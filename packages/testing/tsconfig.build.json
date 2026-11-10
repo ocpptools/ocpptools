@@ -1,0 +1,12 @@
+{
+  "extends": "@ocpptools/tsconfig/library.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "../../.cache/tsconfig/testing.tsbuildinfo",
+    "types": []
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["test", "dist", "coverage"],
+  "references": [{ "path": "../core/tsconfig.build.json" }]
+}
