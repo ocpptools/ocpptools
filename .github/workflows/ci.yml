@@ -31,6 +31,7 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --prod
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm typecheck
@@ -39,11 +40,13 @@ jobs:
       - run: pnpm test:coverage:builder
       - run: pnpm test:coverage:testing
       - run: pnpm build
+      - run: pnpm test:examples
       - run: pnpm bundle:check
       - run: pnpm lint:packages
       - run: pnpm test:pack
       - run: pnpm docs:api
       - run: pnpm size
+      - run: pnpm check:api-inventory
       - run: pnpm check:testing-gate
 
   browser-e2e:

@@ -1,0 +1,16 @@
+{
+  "name": "@ocpptools-example/validate-frame",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Validate an OCPP 2.0.1 frame with @ocpptools/validator and @ocpptools/schemas.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "start": "node index.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@ocpptools/schemas": "workspace:^",
+    "@ocpptools/validator": "workspace:^"
+  }
+}

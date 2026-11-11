@@ -46,6 +46,21 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:testing-gate
+      # CycloneDX for the production dependency graph. The npm tarball does not
+      # include it because published versions are immutable; the workflow
+      # artifact is the record for the release run.
+      - name: Generate a CycloneDX SBOM per published package
+        run: |
+          mkdir -p "$RUNNER_TEMP/sbom"
+          for package in "@ocpptools/core" "@ocpptools/schema-utils" "@ocpptools/validator" "@ocpptools/simulator" "@ocpptools/builder" "@ocpptools/testing" "@ocpptools/schemas" "ocpptools"; do
+            file=$(printf '%s' "$package" | tr '/@' '__')
+            pnpm --filter "$package" sbom --sbom-format cyclonedx --sbom-spec-version 1.6 --prod --lockfile-only > "$RUNNER_TEMP/sbom/$file.cdx.json"
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sbom-cyclonedx
+          path: ${{ runner.temp }}/sbom
+          retention-days: 90
       - uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
           version-script: pnpm version-packages

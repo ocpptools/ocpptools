@@ -76,9 +76,9 @@ and publish the next patch by OIDC.
 6. Approve the `release` environment.
 7. Verify the version, provenance, tag, and GitHub Release.
 
-`@ocpptools/testing` is private until its gate is approved. The release workflow
-runs `pnpm check:testing-gate` before Changesets; a public testing package
-without a recorded decision fails the run.
+`@ocpptools/testing` is public at 0.1.1 under the owner override in ADR 0015.
+The release workflow runs `pnpm check:testing-gate` before Changesets; a public
+testing package without a recorded decision fails the run.
 
 ## Verify a release
 
@@ -110,6 +110,19 @@ package.
 6. Revoke the token in npm.
 7. Delete the GitHub secret.
 8. Document a one-time granular-token procedure for future new packages.
+
+## SBOM and dependency audit
+
+- `pnpm audit --prod` runs in CI on every pull request and push.
+- The release workflow generates one CycloneDX 1.6 SBOM per published package
+  from the production dependency graph and the lockfile, and uploads the set as
+  the `sbom-cyclonedx` workflow artifact (90 days).
+- The SBOM is not included in the npm tarball: published versions are
+  immutable, and the tarball must stay reproducible from the source commit.
+  Attaching the SBOM to each GitHub Release is a follow-up if a consumer asks
+  for it.
+- Signed tags are not used. The release guarantee is the npm provenance
+  attestation plus the protected tag created by Changesets.
 
 ## Release workflow security
 

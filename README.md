@@ -38,8 +38,14 @@ and message construction for OCPP 1.6J and 2.0.1.
 | `@ocpptools/testing`      | Alpha  | Test doubles and deterministic helpers                             |
 
 The core build order is `core` → `schema-utils` / schemas decision →
-`validator` → `simulator` → `builder`. `@ocpptools/testing` 0.1.0 is published
+`validator` → `simulator` → `builder`. `@ocpptools/testing` 0.1.1 is published
 as alpha. `@ocpptools/kit` comes later.
+
+## Examples
+
+Runnable examples live in [`examples/`](examples) and are tested in CI:
+validate a frame, simulate a charge point, build a payload, and use the testing
+harness. See [docs/EXAMPLES.md](docs/EXAMPLES.md).
 
 ## Development
 
