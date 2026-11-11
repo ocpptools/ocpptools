@@ -1,11 +1,19 @@
 # @ocpptools/testing
 
-Unpublished test doubles and deterministic helpers for OCPP 1.6J and 2.0.1.
+Test doubles and deterministic helpers for OCPP 1.6J and 2.0.1.
 
-> **Status:** unpublished. This package is not on npm and has no compatibility
-> promise. The source is public under Apache-2.0. Publication requires a named
-> external consumer; see
-> [ADR 0014](https://github.com/ocpptools/ocpptools/blob/main/docs/ADR/0014-testing-utilities.md).
+> **Status:** alpha. APIs may change in any minor release before 1.0.0. See
+> [ADR 0014](https://github.com/ocpptools/ocpptools/blob/main/docs/ADR/0014-testing-utilities.md)
+> and [ADR 0015](https://github.com/ocpptools/ocpptools/blob/main/docs/ADR/0015-testing-publication-override.md).
+
+## Install
+
+```bash
+npm install @ocpptools/testing
+```
+
+Requires Node.js 22.12 or newer. The package is ESM-only and also runs in the
+browser.
 
 The package provides a protocol-level mock CSMS, an in-memory transport, frame
 factories, synthetic fixtures, and a deterministic fake clock. It is a test

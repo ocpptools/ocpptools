@@ -69,9 +69,9 @@ describe('legal and packaging boundary', () => {
 		}
 	});
 
-	it('keeps the README unpublished and uses synthetic examples', () => {
-		expect(readme).toContain('unpublished');
-		expect(readme).not.toContain('npm install @ocpptools/testing');
+	it('keeps the README public, alpha, and uses synthetic examples', () => {
+		expect(readme).toMatch(/Status:\*\*\s+alpha/);
+		expect(readme).toContain('npm install @ocpptools/testing');
 		expect(readme).toContain('Example');
 		expect(readme).toMatch(/not\s+affiliated/);
 	});

@@ -68,9 +68,9 @@ order before opening a pull request:
   logic.
 - `builder`: headless schema-driven payload and frame construction. No UI,
   schemas, action lists, or Tailwind.
-- `testing` (in `packages/testing`): unpublished test doubles and deterministic
+- `testing` (in `packages/testing`): alpha test doubles and deterministic
   helpers. No OCA schemas, action lists, default responses, Ajv, `ws`, DOM, or
-  Node. No changeset or compatibility promise until publication.
+  Node. Public API changes need a changeset.
 - `schemas`: unmodified copies of the Open Charge Alliance's JSON Schemas, with
   their license and attribution (see
   [ADR 0003](docs/ADR/0003-oca-json-schemas.md)). Never edit, format,
