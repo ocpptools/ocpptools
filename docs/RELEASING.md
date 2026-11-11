@@ -140,6 +140,25 @@ it is split, follow these rules:
 - Run CI and `pnpm test:pack` for the exact commit before publishing.
 - Keep the testing gate before `pnpm release`.
 
+## Partial release 2026-11-11
+
+The 2026-11-11 release published `@ocpptools/core@0.3.1`,
+`@ocpptools/schema-utils@0.3.1`, and `@ocpptools/simulator@0.4.1` with
+provenance. Two packages did not finish:
+
+- `@ocpptools/validator@0.3.1` is staged, not live (`latest` is still 0.3.0).
+  The tag and GitHub Release exist. The owner should run
+  `npm stage list @ocpptools/validator`, approve `0.3.1`, and verify that
+  `latest` moves. Do not move the tag.
+- `@ocpptools/testing@0.1.2` failed with `E404` on `PUT`. The trusted publisher
+  for this package needs review: confirm the package name, repository,
+  workflow, environment, and that the allowed action is `npm publish` rather
+  than `npm stage publish`. Then rerun **Release**; Changesets will publish only
+  the missing version. `0.1.1` remains `latest` until then.
+
+The release workflow is safe to rerun. It skips the versions already live and
+does not move tags.
+
 ## Partial release or failure
 
 - npm versions are immutable. Never re-publish or reuse a version.
