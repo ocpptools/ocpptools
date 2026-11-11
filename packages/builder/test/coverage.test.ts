@@ -451,3 +451,135 @@ describe('builder coverage: schema and actions', () => {
 		});
 	});
 });
+
+describe('builder coverage: roots, defaults, and actions', () => {
+	it('handles boolean, const, and enum roots', async () => {
+		expect(await builderFor(true).buildPayload('Example', {})).toMatchObject({ ok: true });
+		expect(await builderFor(false).buildPayload('Example', {})).toMatchObject({
+			ok: false,
+			error: { code: 'invalid-payload' },
+		});
+		expect(await builderFor({ const: { a: 1 } }).buildPayload('Example', { a: 1 })).toMatchObject({
+			ok: true,
+		});
+		expect(await builderFor(true).emptyPayload('Example')).toMatchObject({ ok: true });
+		expect(await builderFor(false).emptyPayload('Example')).toMatchObject({
+			ok: false,
+			error: { code: 'invalid-payload' },
+		});
+		expect(await builderFor({ type: 'string' }).emptyPayload('Example')).toMatchObject({
+			ok: false,
+			error: { code: 'invalid-payload' },
+		});
+		expect(await builderFor({ const: 'x' }).emptyPayload('Example')).toMatchObject({
+			ok: false,
+			error: { code: 'invalid-payload' },
+		});
+		expect(await builderFor({ enum: ['x'] }).emptyPayload('Example')).toMatchObject({
+			ok: false,
+			error: { code: 'invalid-payload' },
+		});
+	});
+
+	it('compares const arrays and objects by value', async () => {
+		const builder = builderFor({
+			type: 'object',
+			required: ['fixed'],
+			properties: {
+				fixed: {
+					const: {
+						list: [1, { nested: true }],
+						name: 'x',
+					},
+				},
+			},
+		});
+		expect(
+			await builder.buildPayload('Example', { fixed: { list: [1, { nested: true }], name: 'x' } }),
+		).toMatchObject({ ok: true });
+		expect(
+			await builder.buildPayload('Example', { fixed: { list: [1, { nested: false }], name: 'x' } }),
+		).toMatchObject({ ok: false, error: { code: 'invalid-enum' } });
+		expect(
+			await builder.buildPayload('Example', { fixed: { list: [1], name: 'x', extra: true } }),
+		).toMatchObject({ ok: false, error: { code: 'invalid-enum' } });
+	});
+
+	it('rejects an unknown type keyword', async () => {
+		const builder = builderFor({
+			type: 'object',
+			properties: { value: { type: 'custom' } },
+		});
+		expect(await builder.buildPayload('Example', { value: 'x' })).toMatchObject({
+			ok: false,
+			error: { code: 'invalid-type' },
+		});
+	});
+
+	it('lists no actions and generates a default message ID', async () => {
+		const builder = builderFor(OBJECT, { actions: undefined });
+		expect(await builder.listActions()).toMatchObject({ ok: true, value: [] });
+
+		const generated = createBuilder({
+			version: '2.0.1',
+			schemas: { get: () => OBJECT },
+		});
+		const result = await generated.buildCall('Example', { value: 'x' });
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.value[1]).toHaveLength(36);
+	});
+
+	it('keeps schema warnings and retries a rejected loader', async () => {
+		const warned = builderFor({
+			$schema: 'https://example.com/unknown-draft',
+			type: 'object',
+			properties: { value: { type: 'string' } },
+		});
+		const warnedResult = await warned.fields('Example');
+		expect(warnedResult.ok).toBe(true);
+
+		let attempts = 0;
+		const rejecting = createBuilder({
+			version: '2.0.1',
+			schemas: {
+				get: () => {
+					attempts += 1;
+					return attempts === 1 ? Promise.reject(new Error('transient')) : Promise.resolve(OBJECT);
+				},
+			},
+		});
+		expect(await rejecting.has('Example')).toMatchObject({
+			ok: false,
+			error: { code: 'schema-load-failed' },
+		});
+		expect(await rejecting.has('Example')).toMatchObject({ ok: true, value: true });
+	});
+
+	it('treats a hostile toStringTag as a non-module schema', async () => {
+		const hostile = {
+			get [Symbol.toStringTag](): never {
+				throw new Error('tag');
+			},
+		};
+		const result = await builderFor(hostile).fields('Example');
+		expect(result.ok).toBe(true);
+		if (result.ok) expect(result.value.path).toEqual([]);
+	});
+
+	it('rejects an invalid action on every entry point', async () => {
+		const builder = builderFor(OBJECT);
+		expect(await builder.emptyPayload('Bad Action')).toMatchObject({
+			ok: false,
+			error: { code: 'invalid-action' },
+		});
+		expect(await builder.buildPayload('Bad Action', {})).toMatchObject({
+			ok: false,
+			error: { code: 'invalid-action' },
+		});
+		expect(builder.example('Bad Action')).toMatchObject({
+			ok: false,
+			error: { code: 'invalid-action' },
+		});
+	});
+});
