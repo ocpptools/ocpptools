@@ -33,6 +33,7 @@
     "test:coverage": "vitest run --coverage",
     "test:coverage:builder": "vitest run packages/builder/test --coverage --coverage.include=\"packages/builder/src/**/*.ts\" --coverage.thresholds.lines=90 --coverage.thresholds.functions=90 --coverage.thresholds.statements=90 --coverage.thresholds.branches=85",
     "test:coverage:testing": "vitest run packages/testing/test --coverage --coverage.include=\"packages/testing/src/**/*.ts\" --coverage.thresholds.lines=90 --coverage.thresholds.functions=90 --coverage.thresholds.statements=90 --coverage.thresholds.branches=85",
+    "test:e2e:simulator": "pnpm --filter @ocpptools/simulator test:e2e",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "pnpm build && changeset publish",
