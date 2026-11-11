@@ -52,7 +52,8 @@ order before opening a pull request:
 7. `pnpm bundle:check` (the consumer bundle must not load unused schemas)
 8. `pnpm lint:packages` (`publint`, `attw`), `pnpm test:pack` (installs the
    packed tarball in a throwaway project), and `pnpm size`
-9. `pnpm check:api-inventory` and `pnpm check:testing-gate`
+9. `pnpm check:api-inventory`, `pnpm check:workflow-pins`, and
+   `pnpm check:testing-gate`
 10. `pnpm lint:ai-files`, `pnpm lint:schemas`, and `pnpm lint:licenses`
 
 ## Package boundaries
