@@ -1,6 +1,6 @@
 # 0014. Testing utilities: unpublished readiness and publication gate
 
-- Status: accepted
+- Status: accepted; the publication gate in point 9 is superseded by [0015](0015-testing-publication-override.md)
 - Date: 2026-11-09
 
 ## Context

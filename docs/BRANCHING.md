@@ -105,7 +105,9 @@ messages.
 
 ## Releases
 
-`main` is the release line. Routine releases do not use release branches.
+`main` is the release line. Routine releases do not use release branches. See
+[RELEASING.md](RELEASING.md) for trusted publishers, first publishes, token
+retirement, and failure recovery.
 
 The release flow is:
 

@@ -43,6 +43,7 @@ jobs:
       - run: pnpm test:pack
       - run: pnpm docs:api
       - run: pnpm size
+      - run: pnpm check:testing-gate
 
   reuse:
     name: REUSE compliance

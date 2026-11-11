@@ -2,9 +2,10 @@
 // SPDX-FileCopyrightText: 2026 Rodolfo Carrillo
 
 // Fails when a file that Git tracks, or would track, looks like an OCA JSON
-// Schema. The schemas are not Apache-2.0 and no license decision covers them
-// yet (see AGENTS.md). Test fixtures must be synthetic. Files ignored by Git
-// are skipped, so a local copy under `personal/` does not trip the check.
+// Schema. The schemas are not Apache-2.0; ADR 0003 records the accepted
+// CC BY-ND 4.0 risk and the single verbatim location. Test fixtures must be
+// synthetic. Files ignored by Git are skipped, so a local copy under
+// `personal/` does not trip the check.
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
