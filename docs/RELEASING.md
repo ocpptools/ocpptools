@@ -150,14 +150,18 @@ provenance. Two packages did not finish:
   The tag and GitHub Release exist. The owner should run
   `npm stage list @ocpptools/validator`, approve `0.3.1`, and verify that
   `latest` moves. Do not move the tag.
+- `@ocpptools/simulator@0.4.1` is live. A later retry reported a staged 0.4.1
+  entry; if `npm stage list @ocpptools/simulator` shows one, reject the
+  duplicate. Do not publish over the live version.
 - `@ocpptools/testing@0.1.2` failed with `E404` on `PUT`. The trusted publisher
   for this package needs review: confirm the package name, repository,
   workflow, environment, and that the allowed action is `npm publish` rather
-  than `npm stage publish`. Then rerun **Release**; Changesets will publish only
-  the missing version. `0.1.1` remains `latest` until then.
+  than `npm stage publish`. `0.1.1` remains `latest` until then.
 
-The release workflow is safe to rerun. It skips the versions already live and
-does not move tags.
+Do not rerun the release workflow until the staged entries and the testing
+trusted publisher are resolved. A rerun now fails with `E409` for the staged
+versions and `E404` for testing. Once fixed, Changesets publishes only the
+missing version and does not move tags.
 
 ## Partial release or failure
 
