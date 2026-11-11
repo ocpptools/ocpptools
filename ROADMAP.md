@@ -52,7 +52,7 @@ against a mock CSMS.
 Status: implemented for all 28 OCPP 1.6J actions and all 64 OCPP 2.0.1 actions,
 with the browser adapter, schema-valid action matrices, fault injection,
 outbound validation, metrics, scenarios, snapshots, completed 1.6 semantics,
-and hardened 2.0.1 features. 0.4.0 is published. The Node adapter and the
+and hardened 2.0.1 features. 0.4.1 is published. The Node adapter and the
 `ocpptools` CLI are published, and the site UI migration is complete.
 
 ## Phase 5 — Builder
@@ -90,8 +90,9 @@ exports, not indiscriminate `export *`. The CLI must stay functional, not a
 placeholder.
 
 Status: the Node adapter and the `ocpptools` CLI are implemented, tested, and
-published (CLI 0.1.1). The CLI validates frames with `@ocpptools/validator` and
-runs simulator scenarios against a CSMS.
+published (CLI 0.1.1). The CLI validates frames with `@ocpptools/validator`,
+has a `--no-schema` contingency mode, and runs simulator scenarios against a
+CSMS.
 
 `@ocpptools/kit` is deferred (decision date: 2026-11-11). Create it only when a
 named external consumer asks for a composition package and the package APIs are
