@@ -11,16 +11,16 @@ Publishing is CI-only. Never run `npm publish` or `pnpm release` locally.
 The owner keeps this table current. A package is releasable only when the
 publisher is configured and a recent OIDC release is recorded.
 
-| Package                   | Version         | Trusted publisher  | Allowed actions            | Last OIDC       | Token              |
-| ------------------------- | --------------- | ------------------ | -------------------------- | --------------- | ------------------ |
-| `@ocpptools/core`         | 0.3.0           | owner to verify    | `npm publish`              | owner to verify | owner to verify    |
-| `@ocpptools/schema-utils` | 0.3.0           | owner to verify    | `npm publish`              | owner to verify | owner to verify    |
-| `@ocpptools/validator`    | 0.3.0           | owner to verify    | `npm publish`              | owner to verify | owner to verify    |
-| `@ocpptools/simulator`    | 0.4.0           | owner to verify    | `npm publish`              | owner to verify | owner to verify    |
-| `@ocpptools/builder`      | 0.1.0           | owner to verify    | `npm publish`              | owner to verify | owner to verify    |
-| `@ocpptools/schemas`      | 0.1.0           | owner to verify    | `npm publish`              | owner to verify | owner to verify    |
-| `ocpptools`               | 0.1.1           | owner to verify    | `npm publish`              | owner to verify | owner to verify    |
-| `@ocpptools/testing`      | private `0.0.0` | not applicable yet | `npm publish` when created | —               | first publish only |
+| Package                   | Version | Trusted publisher | Allowed actions | Last OIDC       | Token              |
+| ------------------------- | ------- | ----------------- | --------------- | --------------- | ------------------ |
+| `@ocpptools/core`         | 0.3.0   | owner to verify   | `npm publish`   | owner to verify | owner to verify    |
+| `@ocpptools/schema-utils` | 0.3.0   | owner to verify   | `npm publish`   | owner to verify | owner to verify    |
+| `@ocpptools/validator`    | 0.3.0   | owner to verify   | `npm publish`   | owner to verify | owner to verify    |
+| `@ocpptools/simulator`    | 0.4.0   | owner to verify   | `npm publish`   | owner to verify | owner to verify    |
+| `@ocpptools/builder`      | 0.1.0   | owner to verify   | `npm publish`   | owner to verify | owner to verify    |
+| `@ocpptools/schemas`      | 0.1.0   | owner to verify   | `npm publish`   | owner to verify | owner to verify    |
+| `ocpptools`               | 0.1.1   | owner to verify   | `npm publish`   | owner to verify | owner to verify    |
+| `@ocpptools/testing`      | 0.1.1   | configured        | `npm publish`   | 0.1.1           | no longer injected |
 
 ## Configure a trusted publisher
 
