@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Rodolfo Carrillo
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { JsonObject } from '@ocpptools/core';
 
@@ -378,6 +378,43 @@ describe('Simulator201 services', () => {
 			requestId: 5,
 			data: 'data',
 		});
+	});
+
+	it('re-arms a firmware timer longer than the 2.0.1 cap', async () => {
+		const harness = createHarness201();
+		await harness.ready();
+		const delays: number[] = [];
+		const scheduler = harness.simulator.scheduler;
+		const originalSetTimeout = scheduler.setTimeout.bind(scheduler);
+		const spy = vi
+			.spyOn(scheduler, 'setTimeout')
+			.mockImplementation((callback: () => void, delayMs: number) => {
+				delays.push(delayMs);
+				return originalSetTimeout(callback, delayMs);
+			});
+		const retrieve = new Date(
+			Date.parse(harness.simulator.ocppNow()) + 2_147_000_000 + 10_000,
+		).toISOString();
+		expect(
+			await call(harness, 'long-firmware', 'UpdateFirmware', {
+				requestId: 1,
+				firmware: { location: 'https://example.com/firmware', retrieveDateTime: retrieve },
+			}),
+		).toEqual({ status: 'Accepted' });
+		expect(harness.simulator.getState().services.firmware.status).toBe('DownloadScheduled');
+
+		harness.clock.advance(2_147_000_000);
+		await harness.ready();
+		expect(harness.simulator.getState().services.firmware.status).toBe('DownloadScheduled');
+		expect(delays.filter((delay) => delay === 2_147_000_000)).toHaveLength(1);
+
+		harness.clock.advance(10_000);
+		await harness.ready();
+		expect(harness.simulator.getState().services.firmware.status).not.toBe('DownloadScheduled');
+		expect(delays.filter((delay) => delay === 10_000)).toHaveLength(1);
+		spy.mockRestore();
+		harness.simulator.dispose();
+		expect(harness.simulator.scheduler.pendingTimers).toBe(0);
 	});
 
 	it('uses the reject mode for service commands', async () => {
