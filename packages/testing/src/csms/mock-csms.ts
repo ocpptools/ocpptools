@@ -471,13 +471,14 @@ class MockCsmsImpl implements MockCsms {
 			}
 			return;
 		}
+		if (type !== MESSAGE_TYPE.CALL) {
+			// OCPP 2.0.1 Errata 2026-09 removes the extension fallback and
+			// deprecates MessageTypeNotSupported: an unknown message type is
+			// ignored, not answered, in every version.
+			return;
+		}
 		if (!this.replyToInvalidFrames || messageId === undefined) return;
-		const code =
-			type !== MESSAGE_TYPE.CALL && this.version === '2.0.1'
-				? 'MessageTypeNotSupported'
-				: this.version === '2.0.1'
-					? 'FormatViolation'
-					: 'FormationViolation';
+		const code = this.version === '2.0.1' ? 'FormatViolation' : 'FormationViolation';
 		try {
 			this.sendErrorById(messageId, code, 'Malformed frame', {});
 		} catch (error) {

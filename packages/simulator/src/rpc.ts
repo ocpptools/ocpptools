@@ -806,14 +806,14 @@ export class Rpc {
 		if (
 			inbound.messageType === undefined &&
 			inbound.messageId !== undefined &&
-			this.version === '2.0.1' &&
 			epoch === this.epoch
 		) {
-			void this.sendErrorRaw(
-				inbound.messageId,
-				'MessageTypeNotSupported',
-				'The message type is not supported',
-			).catch((error: unknown) => this.report(error));
+			// OCPP 2.0.1 Errata 2026-09 removes the extension fallback and
+			// deprecates MessageTypeNotSupported: an unknown message type is
+			// ignored, not answered. The warning stays local.
+			this.system('warning', 'Ignored a message with an unsupported message type', {
+				messageId: inbound.messageId,
+			});
 		}
 	}
 

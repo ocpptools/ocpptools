@@ -87,7 +87,10 @@ throws.
 - Only schema positions are converted. A property called `id` or `type`, and
   the contents of `enum`, `default`, and unknown keywords, are data and stay.
 - Unknown keywords such as `javaType` are kept. `stripUnknownKeywords: true`
-  removes them for strict validators.
+  removes them for strict validators. It also removes keywords introduced after
+  the input draft, so a draft-06 schema drops `if`/`then`/`else`, and a
+  draft-04 schema also drops `const`, `contains`, `examples`, and
+  `propertyNames`.
 - A schema with an unsupported `$schema` is returned unchanged with an
   `unknown-draft` warning. A schema with no `$schema` is read as `defaultDraft`
   (draft-07 by default).

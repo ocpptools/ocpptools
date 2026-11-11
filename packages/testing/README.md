@@ -119,9 +119,11 @@ handler, `await csms.waitForIdle()` waits for every in-flight handler, validator
 and response.
 
 Malformed frames are recorded in `issues`. With `replyToInvalidFrames: true`,
-the mock answers malformed CALLs and unknown message types, but never answers a
-CALLRESULT or CALLERROR with a CALLERROR. A malformed response with a matching
-pending ID rejects the server-initiated call instead of leaving it hanging.
+the mock answers malformed CALLs with the version-specific error code. Unknown
+message types are ignored in every version, following OCPP 2.0.1 Errata
+2026-09. The mock never answers a CALLRESULT or CALLERROR with a CALLERROR. A
+malformed response with a matching pending ID rejects the server-initiated call
+instead of leaving it hanging.
 
 ## Frame factories
 

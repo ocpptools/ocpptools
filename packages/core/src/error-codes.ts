@@ -10,7 +10,9 @@ import { isOcppVersion, type OcppVersion } from './version.js';
  * - 1.6J spells `FormationViolation` and `OccurenceConstraintViolation` (sic).
  * - 2.0.1 renames the first to `FormatViolation`, corrects the spelling of the
  *   second to `OccurrenceConstraintViolation`, and adds `MessageTypeNotSupported`
- *   and `RpcFrameworkError`.
+ *   and `RpcFrameworkError`. OCPP 2.0.1 Errata 2026-09 deprecates
+ *   `MessageTypeNotSupported`; it stays accepted so frames from older peers
+ *   remain valid, but new code should not send it.
  */
 export const OCPP_ERROR_CODES = {
 	'1.6': [
