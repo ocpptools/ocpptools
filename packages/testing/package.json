@@ -1,6 +1,6 @@
 {
   "name": "@ocpptools/testing",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Test doubles and deterministic helpers for OCPP 1.6J and 2.0.1.",
   "license": "Apache-2.0",
