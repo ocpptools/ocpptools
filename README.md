@@ -4,11 +4,12 @@ Open-source TypeScript libraries for the Open Charge Point Protocol (OCPP):
 frame parsing, schema-driven validation, headless charging-station simulation,
 and message construction for OCPP 1.6J and 2.0.1.
 
-> **Status:** alpha. `@ocpptools/core`, `@ocpptools/schema-utils`, and
-> `@ocpptools/validator` 0.3.0 are published on npm, with
-> `@ocpptools/simulator` 0.4.0, `@ocpptools/builder` 0.1.0,
-> `@ocpptools/schemas` 0.1.0, `@ocpptools/testing` 0.1.1, and the `ocpptools`
-> CLI 0.1.1. APIs are unstable until 1.0.0.
+> **Status:** alpha. `@ocpptools/core` and `@ocpptools/schema-utils` 0.3.1,
+> `@ocpptools/validator` 0.3.0, `@ocpptools/simulator` 0.4.1,
+> `@ocpptools/builder` 0.1.0, `@ocpptools/schemas` 0.1.0,
+> `@ocpptools/testing` 0.1.1, and the `ocpptools` CLI 0.1.1 are published on
+> npm. `@ocpptools/validator` 0.3.1 is staged and awaits approval. APIs are
+> unstable until 1.0.0.
 
 ## What this repository is
 
@@ -39,7 +40,8 @@ and message construction for OCPP 1.6J and 2.0.1.
 
 The core build order is `core` → `schema-utils` / schemas decision →
 `validator` → `simulator` → `builder`. `@ocpptools/testing` 0.1.1 is published
-as alpha. `@ocpptools/kit` comes later.
+as alpha; 0.1.2 is blocked on the npm trusted publisher. `@ocpptools/kit` is
+deferred until a named consumer exists.
 
 ## Examples
 
