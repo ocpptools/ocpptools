@@ -1,0 +1,15 @@
+{
+  "name": "@ocpptools-example/testing-harness",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Exercise a mock CSMS and an in-memory transport with @ocpptools/testing.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "start": "node index.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@ocpptools/testing": "workspace:^"
+  }
+}

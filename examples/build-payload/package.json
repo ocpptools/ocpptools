@@ -1,0 +1,16 @@
+{
+  "name": "@ocpptools-example/build-payload",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Build a schema-valid OCPP 2.0.1 CALL frame with @ocpptools/builder.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "start": "node index.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@ocpptools/builder": "workspace:^",
+    "@ocpptools/schemas": "workspace:^"
+  }
+}

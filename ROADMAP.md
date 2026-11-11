@@ -91,8 +91,14 @@ placeholder.
 
 Status: the Node adapter and the `ocpptools` CLI are implemented, tested, and
 published (CLI 0.1.1). The CLI validates frames with `@ocpptools/validator` and
-runs simulator scenarios against a CSMS. `@ocpptools/kit` remains and is
-created only with a real consumer.
+runs simulator scenarios against a CSMS.
+
+`@ocpptools/kit` is deferred (decision date: 2026-11-11). Create it only when a
+named external consumer asks for a composition package and the package APIs are
+stable. The request must name the use case, the packages to compose, and why
+importing them directly is insufficient. Until then there is no `packages/kit`,
+no release, and no CI for it. `kit` would use explicit named exports, not
+`export *`.
 
 ## Phase 8 — Real cryptography and ISO 15118
 

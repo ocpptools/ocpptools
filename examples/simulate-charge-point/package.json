@@ -1,0 +1,16 @@
+{
+  "name": "@ocpptools-example/simulate-charge-point",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Run a headless OCPP 1.6J charge point against an in-memory CSMS.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "start": "node index.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@ocpptools/simulator": "workspace:^",
+    "@ocpptools/testing": "workspace:^"
+  }
+}

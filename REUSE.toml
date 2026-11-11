@@ -31,6 +31,14 @@ precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Rodolfo Carrillo"
 SPDX-License-Identifier = "Apache-2.0"
 
+# Example workspace packages: the manifests and READMEs cannot hold a header
+# inline; the .mjs files carry SPDX headers.
+[[annotations]]
+path = ["examples/*/package.json", "examples/*/README.md"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Rodolfo Carrillo"
+SPDX-License-Identifier = "Apache-2.0"
+
 # The OCA JSON Schemas are not ours. They are byte-for-byte copies of files
 # written and published by the Open Charge Alliance, under CC BY-ND 4.0. See
 # docs/ADR/0003-oca-json-schemas.md and packages/schemas/SOURCES.md.
