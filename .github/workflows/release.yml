@@ -8,10 +8,10 @@ name: Release
 # - CHANGESETS_TOKEN: token that opens the version pull request. The organization
 #   does not let GITHUB_TOKEN create pull requests, and pull requests it creates
 #   do not trigger the required checks anyway.
-# - NPM_TOKEN: temporary. npm trusted publishing needs the package to exist, so
-#   the first publish uses a token. Remove it once the trusted publisher is set
-#   up (owner ocpptools, repository ocpptools, workflow release.yml, environment
-#   release).
+# npm publishing uses the trusted publisher (owner ocpptools, repository
+# ocpptools, workflow release.yml, environment release) with OIDC and
+# provenance. The temporary NPM_TOKEN is no longer injected here; delete the
+# secret in GitHub and revoke the token in npm if it still exists.
 on:
   workflow_dispatch:
 
@@ -27,7 +27,7 @@ jobs:
     name: Release
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     environment: release
     permissions:
       contents: write
@@ -61,7 +61,6 @@ jobs:
           # compares with the sign-off, and so release tags stay annotated.
           push-with-git-cli: true
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           # pnpm 11 publishes by itself and reads `pnpm_config_*` variables. It
           # ignores `NPM_CONFIG_PROVENANCE`, so 0.1.0 of core went out without an
           # attestation. The name is case sensitive on Linux. Check a release

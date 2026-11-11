@@ -7,7 +7,7 @@ and message construction for OCPP 1.6J and 2.0.1.
 > **Status:** alpha. `@ocpptools/core`, `@ocpptools/schema-utils`, and
 > `@ocpptools/validator` 0.3.0 are published on npm, with
 > `@ocpptools/simulator` 0.4.0, `@ocpptools/builder` 0.1.0,
-> `@ocpptools/schemas` 0.1.0, `@ocpptools/testing` 0.1.0, and the `ocpptools`
+> `@ocpptools/schemas` 0.1.0, `@ocpptools/testing` 0.1.1, and the `ocpptools`
 > CLI 0.1.1. APIs are unstable until 1.0.0.
 
 ## What this repository is

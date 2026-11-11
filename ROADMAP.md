@@ -73,9 +73,9 @@ implementation may be maintained as readiness work; it is not supported and
 carries no compatibility promise. Fixtures must not include copies or
 adaptations of the OCPP schemas.
 
-Status: published as alpha without a named external consumer, at the owner's
-request. The package is supported as alpha only; 1.0 still needs real consumer
-feedback. See [ADR 0014](docs/ADR/0014-testing-utilities.md) and
+Status: `0.1.1` published as alpha without a named external consumer, at the
+owner's request. The package is supported as alpha only; 1.0 still needs real
+consumer feedback. See [ADR 0014](docs/ADR/0014-testing-utilities.md) and
 [ADR 0015](docs/ADR/0015-testing-publication-override.md).
 
 testing-release-decision: owner-override
