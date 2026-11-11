@@ -9,12 +9,12 @@
 
 | Package                   | Version | Entrypoints                                    | Runtime dependencies                         | `sideEffects` | Stability |
 | ------------------------- | ------- | ---------------------------------------------- | -------------------------------------------- | ------------- | --------- |
-| `@ocpptools/core`         | 0.3.0   | `.`                                            | none                                         | `false`       | alpha     |
-| `@ocpptools/schema-utils` | 0.3.0   | `.`                                            | none                                         | `false`       | alpha     |
-| `@ocpptools/validator`    | 0.3.0   | `.`                                            | `core`, `schema-utils`, `ajv`, `ajv-formats` | `false`       | alpha     |
-| `@ocpptools/simulator`    | 0.4.0   | `.`, `./1.6`, `./2.0.1`, `./browser`, `./node` | `core`                                       | `false`       | alpha     |
+| `@ocpptools/core`         | 0.3.1   | `.`                                            | none                                         | `false`       | alpha     |
+| `@ocpptools/schema-utils` | 0.3.1   | `.`                                            | none                                         | `false`       | alpha     |
+| `@ocpptools/validator`    | 0.3.0*  | `.`                                            | `core`, `schema-utils`, `ajv`, `ajv-formats` | `false`       | alpha     |
+| `@ocpptools/simulator`    | 0.4.1   | `.`, `./1.6`, `./2.0.1`, `./browser`, `./node` | `core`                                       | `false`       | alpha     |
 | `@ocpptools/builder`      | 0.1.0   | `.`                                            | `core`, `schema-utils`                       | `false`       | alpha     |
-| `@ocpptools/testing`      | 0.1.1   | `.`                                            | `core`                                       | `false`       | alpha     |
+| `@ocpptools/testing`      | 0.1.1*  | `.`                                            | `core`                                       | `false`       | alpha     |
 | `@ocpptools/schemas`      | 0.1.0   | `./1.6/*`, `./2.0.1/*`, `./manifest.json`      | none                                         | `false`       | alpha     |
 | `ocpptools` (CLI)         | 0.1.1   | `.` (library), `bin`                           | `core`, `schemas`, `simulator`, `validator`  | `false`       | alpha     |
 
@@ -132,3 +132,5 @@ it catches packaging drift.
 - TypeDoc HTML is generated locally and in CI but is not hosted yet.
 - OCPP 2.1.0 is not part of the public API.
 - `@ocpptools/kit` is not created. See [ROADMAP](../ROADMAP.md).
+
+`*` `@ocpptools/validator@0.3.1` is staged and awaits approval; `@ocpptools/testing@0.1.2` is blocked on the npm trusted publisher. The table shows the live `latest` version.
