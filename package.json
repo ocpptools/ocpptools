@@ -31,6 +31,7 @@
     "typecheck:test": "pnpm -r --filter @ocpptools/* --filter ocpptools --if-present run typecheck:test",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:coverage:builder": "vitest run packages/builder/test --coverage --coverage.include=\"packages/builder/src/**/*.ts\" --coverage.thresholds.lines=90 --coverage.thresholds.functions=90 --coverage.thresholds.statements=90 --coverage.thresholds.branches=85",
     "test:coverage:testing": "vitest run packages/testing/test --coverage --coverage.include=\"packages/testing/src/**/*.ts\" --coverage.thresholds.lines=90 --coverage.thresholds.functions=90 --coverage.thresholds.statements=90 --coverage.thresholds.branches=85",
     "changeset": "changeset",
     "version-packages": "changeset version",
@@ -41,7 +42,7 @@
     "lint:schemas": "node scripts/check-no-oca-schemas.mjs && node scripts/check-verbatim-schemas.mjs",
     "lint:licenses": "reuse lint",
     "check:testing-gate": "node scripts/check-testing-gate.mjs",
-    "verify": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm typecheck:test && pnpm test:coverage && pnpm test:coverage:testing && pnpm build && pnpm bundle:check && pnpm lint:packages && pnpm test:pack && pnpm docs:api && pnpm size && pnpm check:testing-gate && pnpm lint:ai-files && pnpm lint:schemas && pnpm lint:licenses",
+    "verify": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm typecheck:test && pnpm test:coverage && pnpm test:coverage:builder && pnpm test:coverage:testing && pnpm build && pnpm bundle:check && pnpm lint:packages && pnpm test:pack && pnpm docs:api && pnpm size && pnpm check:testing-gate && pnpm lint:ai-files && pnpm lint:schemas && pnpm lint:licenses",
     "docs:api": "typedoc",
     "size": "pnpm -r --filter @ocpptools/* --filter ocpptools --if-present run size"
   },

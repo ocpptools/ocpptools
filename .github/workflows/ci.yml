@@ -36,6 +36,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm typecheck:test
       - run: pnpm test:coverage
+      - run: pnpm test:coverage:builder
       - run: pnpm test:coverage:testing
       - run: pnpm build
       - run: pnpm bundle:check
