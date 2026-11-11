@@ -421,6 +421,77 @@ describe('normalizeSchema with stripUnknownKeywords', () => {
 		expect(normalized(schema, { stripUnknownKeywords: true }).schema).toEqual(schema);
 	});
 
+	it('removes draft-07 keywords from a draft-06 schema', () => {
+		const result = normalized(
+			{
+				$schema: DRAFT_06,
+				type: 'object',
+				if: { required: ['a'] },
+				then: { required: ['b'] },
+				else: { required: ['c'] },
+				$comment: 'comment',
+				readOnly: true,
+				writeOnly: false,
+				contentEncoding: 'base64',
+				contentMediaType: 'text/plain',
+				properties: { a: { type: 'string', const: 'kept' } },
+			},
+			{ stripUnknownKeywords: true },
+		);
+		expect(result.schema).toEqual({
+			$schema: DRAFT_07,
+			type: 'object',
+			properties: { a: { type: 'string', const: 'kept' } },
+		});
+	});
+
+	it('removes draft-06 keywords from a draft-04 schema', () => {
+		const result = normalized(
+			{
+				$schema: DRAFT_04,
+				type: 'object',
+				const: { a: 1 },
+				contains: { type: 'string' },
+				propertyNames: { pattern: '^a' },
+				examples: ['x'],
+				properties: { a: { type: 'string' } },
+			},
+			{ stripUnknownKeywords: true },
+		);
+		expect(result.schema).toEqual({
+			$schema: DRAFT_07,
+			type: 'object',
+			properties: { a: { type: 'string' } },
+		});
+	});
+
+	it('keeps draft-06 keywords in a draft-06 schema', () => {
+		const schema = {
+			$schema: DRAFT_06,
+			const: { a: 1 },
+			contains: { type: 'string' },
+			propertyNames: { pattern: '^a' },
+			examples: ['x'],
+		};
+		expect(normalized(schema, { stripUnknownKeywords: true }).schema).toEqual({
+			...schema,
+			$schema: DRAFT_07,
+		});
+	});
+
+	it('keeps draft-07 keywords in a draft-07 schema', () => {
+		const schema = {
+			$schema: DRAFT_07,
+			if: { required: ['a'] },
+			then: { required: ['b'] },
+			else: { required: ['c'] },
+			$comment: 'comment',
+			readOnly: true,
+			contentEncoding: 'base64',
+		};
+		expect(normalized(schema, { stripUnknownKeywords: true }).schema).toEqual(schema);
+	});
+
 	it('drops a draft-04 id that could not be renamed', () => {
 		const result = normalized(
 			{ $schema: DRAFT_04, id: 5, type: 'object' },

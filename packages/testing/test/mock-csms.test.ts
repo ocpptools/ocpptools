@@ -364,14 +364,16 @@ describe('mock CSMS', () => {
 		expect(one.csms.errors[0]?.[2]).toBe('FormationViolation');
 	});
 
-	it('uses MessageTypeNotSupported for unknown 2.0.1 message types', async () => {
+	it('ignores unknown message types in both versions', async () => {
+		// OCPP 2.0.1 Errata 2026-09 removed the extension fallback. An unknown
+		// message type is ignored, not answered, even with replyToInvalidFrames.
 		const two = setup('2.0.1', { replyToInvalidFrames: true });
 		await send(two.pair, '[9,"msg-1"]');
-		expect(two.csms.errors[0]?.[2]).toBe('MessageTypeNotSupported');
+		expect(two.csms.errors).toEqual([]);
 
 		const one = setup('1.6', { replyToInvalidFrames: true });
 		await send(one.pair, '[9,"msg-1"]');
-		expect(one.csms.errors[0]?.[2]).toBe('FormationViolation');
+		expect(one.csms.errors).toEqual([]);
 	});
 
 	it('never replies with CALLERROR to malformed CALLRESULT/CALLERROR', async () => {

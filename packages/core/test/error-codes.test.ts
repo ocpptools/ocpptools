@@ -23,6 +23,7 @@ describe('OCPP_ERROR_CODES', () => {
 		expect(OCPP_ERROR_CODES['2.0.1']).toContain('FormatViolation');
 		expect(OCPP_ERROR_CODES['2.0.1']).toContain('OccurrenceConstraintViolation');
 		expect(OCPP_ERROR_CODES['2.0.1']).toContain('RpcFrameworkError');
+		// Deprecated by OCPP 2.0.1 Errata 2026-09, still accepted on the wire.
 		expect(OCPP_ERROR_CODES['2.0.1']).toContain('MessageTypeNotSupported');
 		expect(OCPP_ERROR_CODES['2.0.1']).not.toContain('FormationViolation');
 		expect(OCPP_ERROR_CODES['2.0.1']).not.toContain('OccurenceConstraintViolation');

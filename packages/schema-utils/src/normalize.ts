@@ -21,8 +21,9 @@ export interface NormalizeOptions {
 	/** The draft to assume for a schema with no `$schema`. Default: `draft-07`. */
 	readonly defaultDraft?: SupportedDraft;
 	/**
-	 * Remove every keyword that draft-07 does not define, such as `javaType`.
-	 * Strict validators reject them. Default: `false`.
+	 * Remove every keyword that the input draft does not define, such as
+	 * `javaType`, or `if` in a draft-06 schema. Strict validators reject them.
+	 * Default: `false`.
 	 */
 	readonly stripUnknownKeywords?: boolean;
 }
@@ -65,6 +66,7 @@ export interface NormalizeError {
 
 interface Context {
 	readonly draft: SupportedDraft;
+	readonly known: ReadonlySet<string>;
 	readonly strip: boolean;
 	readonly warnings: NormalizeWarning[];
 }
@@ -105,6 +107,33 @@ const draft07Keywords = new Set([
 	'uniqueItems',
 	'writeOnly',
 ]);
+
+// Keywords introduced after a draft. A schema written for an older draft must
+// ignore them, so `stripUnknownKeywords` removes them before Ajv sees them.
+const draft07OnlyKeywords = new Set([
+	'$comment',
+	'contentEncoding',
+	'contentMediaType',
+	'else',
+	'if',
+	'readOnly',
+	'then',
+	'writeOnly',
+]);
+const draft06OnlyKeywords = new Set(['const', 'contains', 'examples', 'propertyNames']);
+
+const draft06Keywords = new Set(
+	[...draft07Keywords].filter((keyword) => !draft07OnlyKeywords.has(keyword)),
+);
+const draft04Keywords = new Set(
+	[...draft06Keywords].filter((keyword) => !draft06OnlyKeywords.has(keyword)),
+);
+
+function knownKeywords(draft: SupportedDraft): ReadonlySet<string> {
+	if (draft === 'draft-04') return draft04Keywords;
+	if (draft === 'draft-06') return draft06Keywords;
+	return draft07Keywords;
+}
 
 function normalizeNode(node: JsonValue, path: Path, context: Context, isRoot: boolean): JsonValue {
 	if (!isJsonObject(node)) {
@@ -155,7 +184,7 @@ function normalizeNode(node: JsonValue, path: Path, context: Context, isRoot: bo
 			defineData(copy, key, DRAFT_07_SCHEMA_URI);
 			continue;
 		}
-		if (context.strip && !draft07Keywords.has(key)) {
+		if (context.strip && !context.known.has(key)) {
 			continue;
 		}
 		defineData(
@@ -179,8 +208,10 @@ function invalid(message: string, path: Path): Result<never, NormalizeError> {
  *
  * - Draft-04 to draft-07: `id` becomes `$id`, a boolean `exclusiveMinimum` or
  *   `exclusiveMaximum` becomes the numeric form, and `$schema` is updated.
- * - Draft-06 to draft-07: only `$schema` is updated.
- * - Draft-07: nothing changes.
+ * - Draft-06 to draft-07: only `$schema` is updated. With
+ *   `stripUnknownKeywords`, keywords the draft does not define are removed too.
+ * - Draft-07: nothing changes, except unknown keywords with
+ *   `stripUnknownKeywords`.
  *
  * Only schema positions are converted (`properties` values, `items`,
  * `definitions`, and so on). A property that is called `id` or `type`, and the
@@ -219,6 +250,7 @@ export function normalizeSchema(
 	}
 	const context: Context = {
 		draft,
+		known: knownKeywords(draft),
 		strip: options.stripUnknownKeywords === true,
 		warnings: [],
 	};

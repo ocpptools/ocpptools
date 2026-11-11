@@ -150,7 +150,9 @@ describe('Rpc', () => {
 		expect(modern.sent[0]).toContain('"FormatViolation"');
 	});
 
-	it('answers an unknown message type only in 2.0.1', async () => {
+	it('ignores an unknown message type in both versions', async () => {
+		// OCPP 2.0.1 Errata 2026-09 removed the extension fallback and
+		// deprecated MessageTypeNotSupported. No CALLERROR is sent.
 		const legacy = createHarness('1.6');
 		legacy.rpc.handleText('[9,"id","Heartbeat",{}]');
 		await flushMicrotasks();
@@ -159,7 +161,7 @@ describe('Rpc', () => {
 		const modern = createHarness('2.0.1');
 		modern.rpc.handleText('[9,"id","Heartbeat",{}]');
 		await flushMicrotasks();
-		expect(modern.sent[0]).toContain('"MessageTypeNotSupported"');
+		expect(modern.sent).toEqual([]);
 	});
 
 	it('preserves an unknown CALLERROR code and warns', async () => {

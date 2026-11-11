@@ -108,12 +108,12 @@ environments without it, or in tests that need predictable IDs.
 The CALLERROR error codes of 1.6J and 2.0.1 are separate sets. They are not
 merged, because the spelling and the content changed:
 
-| 1.6J                           | 2.0.1                           |
-| ------------------------------ | ------------------------------- |
-| `FormationViolation`           | `FormatViolation`               |
-| `OccurenceConstraintViolation` | `OccurrenceConstraintViolation` |
-| (not defined)                  | `MessageTypeNotSupported`       |
-| (not defined)                  | `RpcFrameworkError`             |
+| 1.6J                           | 2.0.1                                          |
+| ------------------------------ | ---------------------------------------------- |
+| `FormationViolation`           | `FormatViolation`                              |
+| `OccurenceConstraintViolation` | `OccurrenceConstraintViolation`                |
+| (not defined)                  | `MessageTypeNotSupported` (deprecated 2026-09) |
+| (not defined)                  | `RpcFrameworkError`                            |
 
 The 1.6J spelling `OccurenceConstraintViolation` (one `r`) is part of that
 version of the protocol, so it is kept as is. The Open Charge Alliance's 1.6-J
