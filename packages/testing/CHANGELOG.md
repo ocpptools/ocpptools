@@ -1,5 +1,11 @@
 # @ocpptools/testing
 
+## 0.1.1
+
+### Patch Changes
+
+- f673012: Validate the trusted publisher with an OIDC patch release.
+
 ## 0.1.0
 
 ### Minor Changes
