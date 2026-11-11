@@ -96,6 +96,7 @@ async function runValidateCommand(
 	try {
 		result = await validateFrameFile(command.file, command.version, {
 			...(command.action === undefined ? {} : { action: command.action }),
+			schema: command.schema,
 			...(io.stdin === undefined ? {} : { stdin: io.stdin }),
 		});
 	} catch (error) {

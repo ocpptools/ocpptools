@@ -74,6 +74,25 @@ describe('validate command', () => {
 		}
 	});
 
+	it('skips the payload schema with --no-schema but still checks the frame', async () => {
+		const invalidPayload = await fixture(
+			'invalid-payload.json',
+			frame(2, 'id-1', 'Heartbeat', { currentTime: 1 }),
+		);
+		const skipped = captureIo();
+		await expect(
+			runCli(['validate', invalidPayload, '--version', '1.6', '--no-schema'], skipped.io),
+		).resolves.toBe(0);
+		expect(skipped.stdout()).toContain('Valid:');
+
+		const malformed = await fixture('malformed.json', frame(2, 'id-2'));
+		const rejected = captureIo();
+		await expect(
+			runCli(['validate', malformed, '--version', '1.6', '--no-schema'], rejected.io),
+		).resolves.toBe(1);
+		expect(rejected.stdout()).toContain('Invalid:');
+	});
+
 	it('checks a CALLRESULT payload when --action is given', async () => {
 		const file = await fixture('heartbeat-response.json', frame(3, 'id-1', { currentTime: 1 }));
 

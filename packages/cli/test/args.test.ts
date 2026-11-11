@@ -29,6 +29,7 @@ describe('arguments', () => {
 			kind: 'validate',
 			file: 'frame.json',
 			version: '1.6',
+			schema: true,
 			json: false,
 		});
 		expect(parseArgs(['validate', '-', '--version=2.0.1', '--action=Heartbeat', '--json'])).toEqual(
@@ -37,9 +38,20 @@ describe('arguments', () => {
 				file: '-',
 				version: '2.0.1',
 				action: 'Heartbeat',
+				schema: true,
 				json: true,
 			},
 		);
+	});
+
+	it('parses --no-schema for validate', () => {
+		expect(parseArgs(['validate', 'frame.json', '--version', '1.6', '--no-schema'])).toEqual({
+			kind: 'validate',
+			file: 'frame.json',
+			version: '1.6',
+			schema: false,
+			json: false,
+		});
 	});
 
 	it('parses simulate and the scenario run alias', () => {

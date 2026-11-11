@@ -4,7 +4,7 @@
 import { readFile } from 'node:fs/promises';
 
 import type { OcppVersion } from '@ocpptools/core';
-import type { ValidationIssue, ValidationResult } from '@ocpptools/validator';
+import { createValidator, type ValidationIssue, type ValidationResult } from '@ocpptools/validator';
 
 import { createCliValidator } from './schemas.js';
 import { terminalSafe } from './text.js';
@@ -14,6 +14,8 @@ export interface ValidateFrameOptions {
 	readonly action?: string;
 	/** Reads standard input when the file is `-`. */
 	readonly stdin?: () => Promise<string>;
+	/** Use the OCA schemas. When false, only the frame shape is checked. */
+	readonly schema?: boolean;
 }
 
 /** Reads a text file, or standard input when the name is `-`. */
@@ -47,7 +49,10 @@ export async function validateFrameFile(
 			cause: error,
 		});
 	}
-	const validator = createCliValidator(version);
+	const validator =
+		options.schema === false
+			? createValidator({ version, schemas: { get: () => true } })
+			: createCliValidator(version);
 	return options.action === undefined
 		? validator.validateFrame(frame)
 		: validator.validateFrame(frame, { requestAction: options.action });
