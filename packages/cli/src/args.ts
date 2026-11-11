@@ -26,6 +26,8 @@ export interface ValidateCommand {
 	readonly version: OcppVersion;
 	/** The request action of a CALLRESULT. */
 	readonly action?: string;
+	/** Skip the OCA payload schemas; frame shape and error codes still apply. */
+	readonly schema: boolean;
 	readonly json: boolean;
 }
 
@@ -43,7 +45,7 @@ export type ParsedCommand = HelpCommand | VersionCommand | ValidateCommand | Sim
 /** The text printed for `--help` and when the CLI runs without arguments. */
 export function usage(): string {
 	return `Usage:
-  ocpptools validate <frame.json> --version <1.6|2.0.1> [--action <RequestAction>] [--json]
+  ocpptools validate <frame.json> --version <1.6|2.0.1> [--action <RequestAction>] [--no-schema] [--json]
   ocpptools simulate --config <file> --scenario <file> [--json]
   ocpptools scenario run <file> --config <file> [--json]
   ocpptools --help
@@ -57,6 +59,7 @@ Commands:
 Options:
   --version <version>  OCPP version of the frame: 1.6 or 2.0.1.
   --action <action>    Request action of a CALLRESULT, used to check its payload.
+  --no-schema          Skip the OCA payload schemas; frame shape and error codes still apply.
   --config <file>      Simulator config JSON file.
   --scenario <file>    Scenario JSON file.
   --json               Print the machine-readable result as JSON.
@@ -112,12 +115,18 @@ function parseValidate(args: readonly string[]): ValidateCommand {
 	const values = new Map<string, string>();
 	let file: string | undefined;
 	let json = false;
+	let schema = true;
 
 	for (let index = 0; index < args.length; index += 1) {
 		const arg = args[index] ?? '';
 		if (arg === '--json') {
 			if (json) throw new UsageError('--json was given more than once');
 			json = true;
+			continue;
+		}
+		if (arg === '--no-schema') {
+			if (!schema) throw new UsageError('--no-schema was given more than once');
+			schema = false;
 			continue;
 		}
 		const option = optionName(arg);
@@ -153,6 +162,7 @@ function parseValidate(args: readonly string[]): ValidateCommand {
 		file,
 		version,
 		...(action === undefined ? {} : { action }),
+		schema,
 		json,
 	};
 }
