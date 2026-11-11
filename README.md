@@ -7,8 +7,8 @@ and message construction for OCPP 1.6J and 2.0.1.
 > **Status:** alpha. `@ocpptools/core`, `@ocpptools/schema-utils`, and
 > `@ocpptools/validator` 0.3.0 are published on npm, with
 > `@ocpptools/simulator` 0.4.0, `@ocpptools/builder` 0.1.0,
-> `@ocpptools/schemas` 0.1.0, and the `ocpptools` CLI 0.1.1. APIs are unstable
-> until 1.0.0. `@ocpptools/testing` is unpublished and not on npm.
+> `@ocpptools/schemas` 0.1.0, `@ocpptools/testing` 0.1.0, and the `ocpptools`
+> CLI 0.1.1. APIs are unstable until 1.0.0.
 
 ## What this repository is
 
@@ -26,20 +26,20 @@ and message construction for OCPP 1.6J and 2.0.1.
 
 ## Packages
 
-| Package                   | Status      | Purpose                                                            |
-| ------------------------- | ----------- | ------------------------------------------------------------------ |
-| `@ocpptools/core`         | Alpha       | OCPP types, frames, parser/serializer, transport interfaces        |
-| `@ocpptools/schema-utils` | Alpha       | JSON Schema normalization and field metadata                       |
-| `@ocpptools/validator`    | Alpha       | Ajv-based validation with an injectable schema registry            |
-| `@ocpptools/simulator`    | Alpha       | Headless charging-station simulator with injectable transports     |
-| `ocpptools`               | Alpha       | CLI for frame validation and simulator scenarios                   |
-| `@ocpptools/builder`      | Alpha       | Headless payload and frame construction                            |
-| `@ocpptools/schemas`      | Alpha       | Unmodified OCA JSON Schemas (CC BY-ND 4.0, © Open Charge Alliance) |
-| `@ocpptools/testing`      | Unpublished | Test doubles and deterministic helpers (not on npm)                |
+| Package                   | Status | Purpose                                                            |
+| ------------------------- | ------ | ------------------------------------------------------------------ |
+| `@ocpptools/core`         | Alpha  | OCPP types, frames, parser/serializer, transport interfaces        |
+| `@ocpptools/schema-utils` | Alpha  | JSON Schema normalization and field metadata                       |
+| `@ocpptools/validator`    | Alpha  | Ajv-based validation with an injectable schema registry            |
+| `@ocpptools/simulator`    | Alpha  | Headless charging-station simulator with injectable transports     |
+| `ocpptools`               | Alpha  | CLI for frame validation and simulator scenarios                   |
+| `@ocpptools/builder`      | Alpha  | Headless payload and frame construction                            |
+| `@ocpptools/schemas`      | Alpha  | Unmodified OCA JSON Schemas (CC BY-ND 4.0, © Open Charge Alliance) |
+| `@ocpptools/testing`      | Alpha  | Test doubles and deterministic helpers                             |
 
 The core build order is `core` → `schema-utils` / schemas decision →
-`validator` → `simulator` → `builder`. `@ocpptools/testing` is implemented
-privately and is not published. `@ocpptools/kit` comes later.
+`validator` → `simulator` → `builder`. `@ocpptools/testing` 0.1.0 is published
+as alpha. `@ocpptools/kit` comes later.
 
 ## Development
 
