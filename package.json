@@ -40,7 +40,8 @@
     "lint:ai-files": "node scripts/check-no-ai-files.mjs",
     "lint:schemas": "node scripts/check-no-oca-schemas.mjs && node scripts/check-verbatim-schemas.mjs",
     "lint:licenses": "reuse lint",
-    "verify": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm typecheck:test && pnpm test:coverage && pnpm test:coverage:testing && pnpm build && pnpm bundle:check && pnpm lint:packages && pnpm test:pack && pnpm docs:api && pnpm size && pnpm lint:ai-files && pnpm lint:schemas && pnpm lint:licenses",
+    "check:testing-gate": "node scripts/check-testing-gate.mjs",
+    "verify": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm typecheck:test && pnpm test:coverage && pnpm test:coverage:testing && pnpm build && pnpm bundle:check && pnpm lint:packages && pnpm test:pack && pnpm docs:api && pnpm size && pnpm check:testing-gate && pnpm lint:ai-files && pnpm lint:schemas && pnpm lint:licenses",
     "docs:api": "typedoc",
     "size": "pnpm -r --filter @ocpptools/* --filter ocpptools --if-present run size"
   },

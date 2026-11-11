@@ -73,10 +73,13 @@ implementation may be maintained as readiness work; it is not supported and
 carries no compatibility promise. Fixtures must not include copies or
 adaptations of the OCPP schemas.
 
-Status: implemented privately (`private: true`, `0.0.0`) at the maintainer's
-request; the package is not published. Publication requires a named external
-consumer, a concrete use case, acceptance of the alpha API, and maintainer
-approval recorded here. See [ADR 0014](docs/ADR/0014-testing-utilities.md).
+Status: published as alpha without a named external consumer, at the owner's
+request. The package is supported as alpha only; 1.0 still needs real consumer
+feedback. See [ADR 0014](docs/ADR/0014-testing-utilities.md) and
+[ADR 0015](docs/ADR/0015-testing-publication-override.md).
+
+testing-release-decision: owner-override
+testing-approved: 2026-11-11 owner
 
 ## Phase 7 — Node adapter, kit, and CLI
 

@@ -20,7 +20,9 @@ pnpm verify
 ## Workflow
 
 The canonical branching, merge, and release policy is
-[docs/BRANCHING.md](docs/BRANCHING.md). The summary below is intentionally
+[docs/BRANCHING.md](docs/BRANCHING.md). Trusted publishers, first publishes,
+token retirement, and release recovery are in
+[docs/RELEASING.md](docs/RELEASING.md). The summary below is intentionally
 short.
 
 1. Fork the repository and create a branch from `main`.
