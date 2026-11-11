@@ -1,5 +1,13 @@
 # @ocpptools/validator
 
+## 0.3.1
+
+### Patch Changes
+
+- Updated dependencies [a9b83f6]
+  - @ocpptools/schema-utils@0.3.1
+  - @ocpptools/core@0.3.1
+
 ## 0.3.0
 
 ### Minor Changes
