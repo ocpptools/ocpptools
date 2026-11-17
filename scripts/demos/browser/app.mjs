@@ -56,7 +56,7 @@ async function validate() {
 	const valid = result.status === 'valid';
 	const label = version === '1.6' ? '1.6J' : version;
 	let html = `<span class="status ${valid ? 'valid' : 'invalid'}">${escape(result.status)}</span>`;
-	html += `<span class="summary">OCPP ${label} ${escape(describe(input))}</span>`;
+	html += `<span class="summary">OCPP ${escape(label)} ${escape(describe(input))}</span>`;
 	if (result.issues.length > 0) {
 		html += '<table><thead><tr><th>Pointer</th><th>Code</th><th>Message</th></tr></thead><tbody>';
 		for (const issue of result.issues) {
