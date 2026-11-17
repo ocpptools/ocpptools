@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "Open-source TypeScript libraries for OCPP 1.6J and 2.0.1.",
+  "description": "Validate, build, and simulate OCPP 1.6J and 2.0.1 messages in TypeScript: in the browser, in Node, or in your CI.",
   "license": "Apache-2.0",
   "author": "Rodolfo Carrillo",
   "repository": {

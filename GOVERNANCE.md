@@ -6,6 +6,15 @@ OCPP Tools currently uses a BDFL model. The project owner makes final decisions
 while the maintainer team is small. The goal is to move toward shared
 maintainership as trusted contributors emerge.
 
+## Principles
+
+- One package per capability, not per website tool.
+- No DOM, UI framework, or Tailwind in published packages.
+- A stable release needs a real consumer; alpha packages may ship first.
+- Apache-2.0 for code and documentation. DCO, no CLA.
+- The OCPP schemas are the Open Charge Alliance's. Only unmodified copies of
+  the originals are kept, in one package, with their license and attribution.
+
 ## Roles
 
 - **Contributor:** opens issues, discussions, and pull requests.

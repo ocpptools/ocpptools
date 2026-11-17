@@ -1,12 +1,71 @@
 # @ocpptools/schemas
 
-The OCPP 1.6J and OCPP 2.0.1 JSON Schemas, exactly as the Open Charge Alliance
-published them.
+Unmodified copies of the Open Charge Alliance OCPP 1.6J and 2.0.1 JSON Schemas, with their license and attribution.
+
+[![npm](https://img.shields.io/npm/v/@ocpptools/schemas)](https://www.npmjs.com/package/@ocpptools/schemas)
+[![License](https://img.shields.io/badge/license-Apache--2.0%20AND%20CC--BY--ND--4.0-blue)](#license)
 
 > **Status:** alpha. The Open Charge Alliance has not confirmed in writing that
 > the JSON files are covered by CC BY-ND 4.0. The maintainers publish them
 > unmodified, with the license and attribution, and accept that risk. See
 > [ADR 0003](https://github.com/ocpptools/ocpptools/blob/main/docs/ADR/0003-oca-json-schemas.md).
+
+## When to use it
+
+- You need the official OCPP 1.6J and 2.0.1 JSON Schemas as files you can
+  import, with their provenance and license.
+- You validate with
+  [`@ocpptools/validator`](https://github.com/ocpptools/ocpptools/tree/main/packages/validator)
+  or build payloads with
+  [`@ocpptools/builder`](https://github.com/ocpptools/ocpptools/tree/main/packages/builder);
+  both load schemas from this package or from your own registry.
+
+## Install
+
+```sh
+npm install @ocpptools/schemas
+```
+
+The package contains only data: JSON files, a manifest, and the license texts.
+
+## Quick start
+
+The schemas use their original JSON Schema drafts: draft-04 for 1.6J and
+draft-06 for 2.0.1. Use `@ocpptools/schema-utils` to read them in a uniform way.
+It converts them in memory, inside your own process.
+
+With Node.js you can import a file by its path:
+
+```js
+import authorize from '@ocpptools/schemas/2.0.1/AuthorizeRequest.json' with { type: 'json' };
+```
+
+### Contents
+
+```text
+schemas/1.6/<Action>.json            requests
+schemas/1.6/<Action>Response.json    responses
+schemas/2.0.1/<Action>Request.json
+schemas/2.0.1/<Action>Response.json
+manifest.json                        SHA-256 of every file, and where it came from
+SOURCES.md                           editions, URLs, hashes, copyright notices
+LICENSE-CC-BY-ND-4.0.txt             the license text
+```
+
+## Verify that nothing changed
+
+`manifest.json` lists the SHA-256 of every file. In the repository,
+`pnpm lint:schemas` fails if a file differs from it, is missing, or is not
+listed. You can also compare a file with the one in the official OCA package.
+
+## Related packages
+
+- [`@ocpptools/validator`](https://github.com/ocpptools/ocpptools/tree/main/packages/validator):
+  validates frames and payloads against these schemas.
+- [`@ocpptools/schema-utils`](https://github.com/ocpptools/ocpptools/tree/main/packages/schema-utils):
+  reads draft-04 and draft-06 schemas in a uniform draft-07 shape.
+- [`ocpptools`](https://github.com/ocpptools/ocpptools/tree/main/packages/cli):
+  validates files from the command line with these schemas.
 
 ## Author and source
 
@@ -57,31 +116,3 @@ OCPP is a trademark of the Open Charge Alliance. OCPP Tools is an independent
 open-source project. It is not affiliated with, endorsed by, sponsored by, or
 certified by the Open Charge Alliance, and including these files does not imply
 otherwise.
-
-## Contents
-
-```text
-schemas/1.6/<Action>.json            requests
-schemas/1.6/<Action>Response.json    responses
-schemas/2.0.1/<Action>Request.json
-schemas/2.0.1/<Action>Response.json
-manifest.json                        SHA-256 of every file, and where it came from
-SOURCES.md                           editions, URLs, hashes, copyright notices
-LICENSE-CC-BY-ND-4.0.txt             the license text
-```
-
-The schemas use their original JSON Schema drafts: draft-04 for 1.6J and
-draft-06 for 2.0.1. Use `@ocpptools/schema-utils` to read them in a uniform way.
-It converts them in memory, inside your own process.
-
-With Node.js you can import a file by its path:
-
-```js
-import authorize from '@ocpptools/schemas/2.0.1/AuthorizeRequest.json' with { type: 'json' };
-```
-
-## Verify that nothing changed
-
-`manifest.json` lists the SHA-256 of every file. In the repository,
-`pnpm lint:schemas` fails if a file differs from it, is missing, or is not
-listed. You can also compare a file with the one in the official OCA package.

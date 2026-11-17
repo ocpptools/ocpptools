@@ -44,6 +44,12 @@ export default tseslint.config(
 		},
 	},
 	{
+		files: ['scripts/demos/browser/**/*.mjs'],
+		languageOptions: {
+			globals: globals.browser,
+		},
+	},
+	{
 		rules: {
 			'@typescript-eslint/consistent-type-imports': [
 				'error',

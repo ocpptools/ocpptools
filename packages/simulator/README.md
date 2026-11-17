@@ -1,13 +1,29 @@
 # @ocpptools/simulator
 
-Headless OCPP 1.6J and 2.0.1 charge point simulator with injectable transports,
-clock, and storage. It runs in the browser or in Node without a DOM in the
-protocol engine.
+Headless OCPP 1.6J and 2.0.1 charge point simulator with injectable transports, clock, and storage.
 
-> **Status:** alpha. APIs are unstable until 1.0.0.
+[![npm](https://img.shields.io/npm/v/@ocpptools/simulator)](https://www.npmjs.com/package/@ocpptools/simulator)
+[![License](https://img.shields.io/npm/l/@ocpptools/simulator)](https://github.com/ocpptools/ocpptools/blob/main/LICENSE)
 
-OCPP is a specification of the Open Charge Alliance. This project is not
-affiliated with, endorsed by, or certified by the Open Charge Alliance.
+> **Status:** alpha. The API can change in any minor release before 1.0.0.
+
+![A Node script connects a simulated OCPP 2.0.1 station to a CSMS, runs a boot, start, meter, and stop scenario, and prints each CALL it sends.](https://raw.githubusercontent.com/ocpptools/ocpptools/main/docs/assets/simulator-code.gif)
+
+It runs in the browser or in Node without a DOM in the protocol engine. It
+handles all 28 OCPP 1.6J actions and all 64 OCPP 2.0.1 actions, keeps
+serializable state, and supports scenarios, persistence, fault injection, and
+opt-in real cryptography.
+
+## When to use it
+
+- You build or test a CSMS and need charging stations that connect over
+  WebSocket and behave like real ones: boot, status, authorization,
+  transactions, meter values, and CSMS commands.
+- You build a browser or Node tool that drives a simulated station.
+- To run a scenario from the terminal without code, use the
+  [`ocpptools` CLI](https://github.com/ocpptools/ocpptools/tree/main/packages/cli).
+- For unit tests without a network, combine it with
+  [`@ocpptools/testing`](https://github.com/ocpptools/ocpptools/tree/main/packages/testing).
 
 ## Install
 
@@ -15,35 +31,21 @@ affiliated with, endorsed by, or certified by the Open Charge Alliance.
 npm install @ocpptools/simulator @ocpptools/core
 ```
 
-The package is ESM-only and requires Node >= 22.12 when used outside the
+The package is ESM-only and requires Node.js 22.12 or newer outside the
 browser.
 
-## Entrypoints
+## Quick start
 
-| Entrypoint                     | Contents                                                                |
-| ------------------------------ | ----------------------------------------------------------------------- |
-| `@ocpptools/simulator`         | Engine primitives and the version-agnostic `createSimulator` factory    |
-| `@ocpptools/simulator/1.6`     | `Simulator16`, `createSimulator16`, the 1.6J profile and state types    |
-| `@ocpptools/simulator/2.0.1`   | `Simulator201`, `createSimulator201`, the 2.0.1 profile and state types |
-| `@ocpptools/simulator/browser` | WebSocket transport factory, browser clock, Web Storage adapter         |
-| `@ocpptools/simulator/node`    | Node WebSocket transport factory, Node clock, memory and file storage   |
-
-The version subpaths fix the protocol version. Importing any runtime symbol
-from the root loads both profile modules because the root exports the
-`createSimulator` factory; use a version subpath to load only one protocol. The
-browser and Node entries contain no protocol profile, and the engine entries
-contain no DOM or Node APIs.
-
-## Factories
+Connect an OCPP 2.0.1 charging station to a CSMS from Node:
 
 ```ts
-import { createSimulator } from '@ocpptools/simulator';
+import { createNodeWebSocketTransportFactory, nodeClock } from '@ocpptools/simulator/node';
+import { Simulator201 } from '@ocpptools/simulator/2.0.1';
 
-const simulator = createSimulator({
-  version: '2.0.1',
+const simulator = new Simulator201({
   url: 'wss://csms.example.com/CP001',
-  transport,
-  clock,
+  transport: createNodeWebSocketTransportFactory(),
+  clock: nodeClock,
   station: {
     id: 'CP001',
     vendorName: 'Acme',
@@ -52,32 +54,14 @@ const simulator = createSimulator({
   },
 });
 
-const legacy = createSimulator({
-  version: '1.6',
-  url: 'wss://csms.example.com/CP002',
-  transport,
-  clock,
-  station: {
-    id: 'CP002',
-    vendor: 'Acme',
-    model: 'AC-7',
-    firmwareVersion: '1.0.0',
-  },
-});
+simulator.connect();
 ```
 
-`createSimulator16(options)` and `createSimulator201(options)` are also
-available from their subpaths. The `Simulator16` and `Simulator201` classes
-remain public.
+The Node transport uses the built-in `WebSocket` of Node.js 22.12 or newer. For
+OCPP 1.6J, import `Simulator16` from `@ocpptools/simulator/1.6` and use
+`station: { id, vendor, model, firmwareVersion, connectorCount }`.
 
-Grouped sub-APIs expose the existing flows without duplicating state. OCPP
-1.6 provides `transactions`, `localAuth`, `reservations`, `chargingProfiles`,
-and `availability`. OCPP 2.0.1 adds `deviceModel`, `monitoring`, `display`,
-`certificates`, `firmware`, and `customer`. Engine aliases include
-`getPendingCalls`, `clearPendingCalls`, `getQueueLength`, `clearQueue`,
-`clearHistory`, `resetMetrics`, and `setReconnectOptions`.
-
-## Browser quick start
+## Run in the browser
 
 ```ts
 import { createWebSocketTransportFactory, browserClock } from '@ocpptools/simulator/browser';
@@ -105,255 +89,14 @@ simulator.on('transaction', (event) => {
 simulator.connect();
 ```
 
-With OCPP 1.6, import `Simulator16` from `@ocpptools/simulator/1.6` and use
-`station: { id, vendor, model, firmwareVersion, connectorCount }`.
-
-## Node quick start
-
-```ts
-import { createNodeWebSocketTransportFactory, nodeClock } from '@ocpptools/simulator/node';
-import { Simulator201 } from '@ocpptools/simulator/2.0.1';
-
-const simulator = new Simulator201({
-  url: 'wss://csms.example.com/CP001',
-  transport: createNodeWebSocketTransportFactory(),
-  clock: nodeClock,
-  station: {
-    id: 'CP001',
-    vendorName: 'Acme',
-    model: 'AC-22',
-    firmwareVersion: '2.0.0',
-  },
-});
-
-simulator.connect();
-```
-
-The Node transport uses the built-in `WebSocket` from Node 22.12 and later.
-Import `Simulator16` from `@ocpptools/simulator/1.6` for OCPP 1.6J.
-
-## Injectable environment
-
-The profile classes require:
-
-- `transport`: a `TransportFactory` from `@ocpptools/core`. A new transport is
-  created for every connection attempt and is never reused.
-- `clock`: a `Clock` from `@ocpptools/core`. The scheduler never uses ambient
-  timers.
-
-Optional:
-
-- `messageIds`: a `MessageIdGenerator`.
-- `random`: a deterministic source for lab features.
-
-The browser entry provides `createWebStorage(localStorage)` for consumers that
-wire their own persistence. The Node entry provides `createMemoryStorage()` and
-`createFileStorage(directory)`, which stores one SHA-256-named file per key and
-writes atomically.
-
-## Lifecycle
-
-- `connect()` and `disconnect()` control the transport.
-- `isReady` means the transport is open and, when boot is required, the
-  `BootNotification` was accepted.
-- Pending boot retries; rejected boot does not start heartbeat or status loops.
-- The offline queue is FIFO, bounded, and flushed after ready. BootNotification
-  and Heartbeat are never queued.
-- Calls settle exactly once by result, CALLERROR, timeout, disconnect, send
-  failure, or dispose.
-- `dispose()` cancels timers and rejects pending calls.
-
-## State and events
-
-`getState()` returns a deep copy of the version state plus connection, boot,
-queue, metrics, clock offset, faults, validation mode, and inbound response
-mode. State is JSON-serializable.
-
-Events are a discriminated union: `connection`, `frame`, `log`, `pending`,
-`queue`, `boot`, `heartbeat`, `connector`, `evse`, `transaction`,
-`reservation`, `metrics`, `notice`, `fault`, `validation`, `scenario`, and
-`error`. Use `on(type, listener)`, `onAny(listener)`, or the methods exposed by
-the profile.
-
-```ts
-const unsubscribe = simulator.on('error', (event) => {
-  console.error(event.error.code, event.error.message);
-});
-unsubscribe();
-```
-
-`getHistory()` returns the bounded protocol history. `getMetrics()` returns
-round-trip statistics per action, heartbeat drift, and the last minute's error
-count.
-
-## OCPP 1.6J
-
-`Simulator16` models connectors, status notifications, authorization,
-transactions, meter values, reservations, local authorization, diagnostics,
-firmware status, data transfer, and the 19 CSMS commands. Connector state is
-serializable and survives reconnects.
-
-```ts
-const started = await simulator16.startChargingSession(1, 'AABBCCDD');
-await simulator16.stopTransaction(1, 'Local');
-```
-
-The profile keeps the full 1.6 action surface: 9 charge-point actions and 19
-CSMS commands. Charging profiles support replacement by id or by purpose and
-stack, filtered clearing, and composite schedules that merge the station
-maximum with the active transaction or default profile. `Hard` and `Soft`
-reset follow the 1.6 behavior, `TriggerMessage` handles every 1.6 message, and
-`GetConfiguration`/`ChangeConfiguration` model the writable catalog. Diagnostics
-and firmware emit timed status sequences, reservations expire with the OCPP
-clock, and availability changes apply immediately to idle connectors and after
-the active transaction to the rest.
-
-## OCPP 2.0.1
-
-`Simulator201` models EVSE state, device variables, monitoring, local
-authorization, reservations, charging profiles, displays, customer and cost
-information, firmware, logs, certificates, and security events. All 64 actions
-are handled:
-
-- 25 charge-point-to-CSMS actions, including `TransactionEvent`, meter values,
-  reports, reservations, charging limits, firmware and log status, certificates,
-  and security events.
-- 39 CSMS-to-charge-point actions, plus the bidirectional `DataTransfer`
-  handler.
-
-The advanced features use simulated state by default. Certificates are in-memory
-records without ASN.1 parsing or WebCrypto. Real certificate validation,
-revocation, CSR generation, firmware verification, and ISO 15118/EXI are
-opt-in callbacks under ADR 0009, ADR 0011, and ADR 0012; no crypto or EXI
-implementation is bundled. Firmware and logs are state machines, not real
-flashing or uploads. Monitoring thresholds and composite schedules are calculated
-from stored state. Periodic and clock-aligned monitors run on the injected
-scheduler and emit `NotifyEvent` records. Display messages honor their start and
-end dates. Station-level `Reset` stops transactions and reboots the transport;
-EVSE-scoped resets stop only that EVSE. `UnlockConnector` follows the
-specification and returns `OngoingAuthorizedTransaction` while a transaction is
-active instead of stopping it. The device-model catalog is curated, not the
-complete standard catalog (ADR 0008). It contains
-`OCPPCommCtrlr/HeartbeatInterval`, `AlignedDataCtrlr/Enabled`,
-`SampledDataCtrlr/TxUpdatedInterval`, and `DeviceDataCtrlr/Enabled`;
-`GetVariables`, `SetVariables`, monitoring, and reports ignore variables added
-outside it. OCPP 2.1.0 is deferred (ADR 0010). No feature claims conformance
-evidence.
-
-### Security integration
-
-`Simulator201Options.security` is opt-in and has no effect unless it is set. The
-default remains simulated. This phase supports `validateCertificateChain`,
-`trustStore`, `csrProvider`, `revocation`, `allowUnknownRevocation`, and
-`callbackTimeoutMs`. `trustStore` and the current clock are passed to the
-validator. A CSR provider can be used with
-`certificates.signWithProvider({ subject, keyRef, certificateType? })`, which
-returns `{ keyRef, response }`. `revocation` runs after a real
-`CertificateSigned` chain validates: `good` accepts, `revoked` rejects,
-`unknown` rejects unless `allowUnknownRevocation` is true, and malformed
-results or errors reject. A rejected real chain emits
-`InvalidChargingStationCertificate`. Root installation through
-`InstallCertificate` is not revocation-checked. A `CertificateSigned` request
-without `certificateType` stores the chain for both uses. `callbackTimeoutMs`
-bounds every injected security callback and defaults to 10 seconds. `trustStore`
-and `revocation` require a certificate validator or a firmware verifier, and
-`allowUnknownRevocation` requires a revocation checker; an incomplete
-configuration fails at construction. An `iso15118` codec enables
-`certificates.get15118Message(schemaVersion, action, payload)`: the simulator
-encodes the request, sends `Get15118EVCertificate`, requires an `Accepted`
-response with a valid `exiResponse`, decodes it, and optionally runs
-`validateResponse`. The codec receives `{ schemaVersion, action, payload }` in
-`encodeRequest`, `{ schemaVersion, action, exiResponse }` in `decodeResponse`,
-and `{ schemaVersion, action, response }` in `validateResponse`. Requests and
-responses are limited to 5600 characters and reject PEM private-key material.
-Without a codec, the raw request/response methods remain available and no EXI
-implementation is bundled. A `firmwareVerifier` enables real
-`UpdateFirmware` checks: the request-level signing certificate is validated and
-revocation-checked when a validator or checker is configured, returning
-`InvalidCertificate` or `RevokedCertificate`; after the simulated download, the
-verifier receives the firmware metadata, signature and signing certificate,
-and owns any image download. A valid result emits `SignatureVerified`; an
-invalid one emits `InvalidSignature` or `InstallVerificationFailed`. The engine
-still never flashes hardware or fetches the image. In simulated mode without a
-verifier, the firmware state machine is unchanged; real mode rejects
-`UpdateFirmware` when no verifier is configured. The engine does not import a crypto library and its security
-state never stores private keys. Outbound certificate requests reject
-private-key material and malformed CSR values. No X.509/ASN.1/EXI reference
-implementation is bundled; consumers provide their own validator or service.
-Snapshots do not contain private keys in security state, but `getHistory()`,
-autosave, and snapshots with `includeHistory` can retain raw inbound and
-outbound frames before or after validation. Clear or redact history before
-saving or exporting sensitive material. A validator implies `mode: 'real'`; an
-explicit `simulated` mode with a validator is rejected. `real` without a
-validator also fails with `invalid-options`. See
-[docs/security/crypto-15118.md](../../docs/security/crypto-15118.md) for the
-threat model and the full callback contract.
-
-### Transactions
+## Run a charging session
 
 ```ts
 const started = await simulator.startChargingSession(1, 'AABBCCDD');
 await simulator.stopTransaction(1, 'Local');
-
-simulator.rpc.handleText(
-  JSON.stringify([
-    2,
-    'in-1',
-    'RequestStartTransaction',
-    {
-      remoteStartId: 1,
-      idToken: { idToken: 'AABBCCDD', type: 'ISO14443' },
-    },
-  ]),
-);
 ```
 
-`TransactionEvent` carries `seqNo`, `transactionInfo`, EVSE, idToken, optional
-meter values, and `reservationId` only on the first `Started` event. Sequence
-numbers advance only after a send or queue succeeds.
-
-### Device model and monitoring
-
-`SetVariables`, `GetVariables`, `GetBaseReport`, `GetReport`, `SetVariableMonitoring`,
-`ClearVariableMonitoring`, `SetMonitoringBase`, and `SetMonitoringLevel` use
-serializable device state. Reports are queued before boot and return
-`EmptyResultSet` instead of an empty required array.
-
-### Local authorization and reservations
-
-`SendLocalList` supports Full and Differential updates. Local accepted entries
-authorize without a CSMS call; blocked or expired entries fall back to
-`Authorize` when online. Reservations enforce the token or group, are consumed
-by starts, expire with the injected clock, and are cancelled when an EVSE
-becomes unavailable or faulted.
-
-### Charging profiles
-
-`SetChargingProfile`, `ClearChargingProfile`, `GetChargingProfiles`, and
-`GetCompositeSchedule` store profiles by EVSE and support the station-wide slot 0. Composite schedules honor validity, schedule duration, start times, stack
-level per purpose, `TxProfile` precedence, and W/A conversion. `TxProfile`
-requires an active matching transaction and is removed when it ends.
-
-### Displays, customer, firmware, and logs
-
-Display messages support priorities, states, and transaction-scoped cleanup.
-Customer information accepts token, identifier, or certificate selectors.
-Firmware update honors retrieve and install times and emits status
-notifications. Log upload emits `LogStatusNotification`.
-
-### Certificates and security
-
-`InstallCertificate`, `DeleteCertificate`, `GetInstalledCertificateIds`, and
-`CertificateSigned` store simulated certificate records. `SignCertificate`,
-`Get15118EVCertificate`, `GetCertificateStatus`, and `SecurityEventNotification`
-are available on the public API.
-
-## Scenarios
-
-`runScenario()` executes a neutral step list against either protocol version:
-`boot`, `heartbeat`, `status`, `authorize`, `start`, `wait`, `meter`, `stop`,
-and arbitrary `call` steps. Steps accept `entityId`, the 1.6 `connectorId`
-alias, or the 2.0.1 `evseId` alias; token steps accept `idToken` or `idTag`.
+Or describe the steps as a scenario:
 
 ```ts
 const run = simulator.runScenario([
@@ -369,80 +112,33 @@ if (result.status !== 'completed') {
 }
 ```
 
-Waits use the injected scheduler and `cancel()` stops the current wait. A
-completed transaction is not stopped by default; set `stopOnCancel: true` to
-stop transactions the scenario started. The runner emits `scenario` events for
-`started`, `step`, `completed`, `failed`, and `cancelled`, and returns a
-`ScenarioResult` instead of throwing for expected step failures.
-`runChargingScenario()` remains available on both versions as a convenience
-wrapper.
+## Entrypoints
 
-## Persistence
+| Entrypoint                     | Contents                                                                |
+| ------------------------------ | ----------------------------------------------------------------------- |
+| `@ocpptools/simulator`         | Engine primitives and the version-agnostic `createSimulator` factory    |
+| `@ocpptools/simulator/1.6`     | `Simulator16`, `createSimulator16`, the 1.6J profile and state types    |
+| `@ocpptools/simulator/2.0.1`   | `Simulator201`, `createSimulator201`, the 2.0.1 profile and state types |
+| `@ocpptools/simulator/browser` | WebSocket transport factory, browser clock, Web Storage adapter         |
+| `@ocpptools/simulator/node`    | Node WebSocket transport factory, Node clock, memory and file storage   |
 
-Pass a `Storage` from `@ocpptools/core` to persist profile state, the offline
-queue, and optionally history. Connection, boot, pending calls, metrics, clock
-offset, timers, and in-flight scenarios are never stored.
+The version subpaths fix the protocol version. Importing any runtime symbol
+from the root loads both profile modules because the root exports the
+`createSimulator` factory; use a version subpath to load only one protocol. The
+browser and Node entries contain no protocol profile, and the engine entries
+contain no DOM or Node APIs.
 
-```ts
-const simulator = new Simulator201({
-  url: 'wss://csms.example.com/CP001',
-  transport,
-  clock,
-  station,
-  persistence: {
-    storage: createWebStorage(localStorage),
-    key: 'cp001',
-    autoSave: true,
-    saveDebounceMs: 1000,
-    includeHistory: true,
-  },
-});
+## Reference
 
-const loaded = await simulator.load();
-if (loaded.loaded) simulator.connect();
-
-await simulator.save();
-const snapshot = simulator.exportSnapshot();
-const result = simulator.restoreSnapshot(snapshot);
-```
-
-In Node, use `createFileStorage('./state')` or `createMemoryStorage()` instead
-of the Web Storage adapter.
-
-`load()`, `save()`, and `restoreSnapshot()` never throw for expected storage or
-snapshot failures; they return `LoadResult`, `SaveResult`, or `RestoreResult`
-with an error snapshot. Invalid snapshots are rejected before state changes.
-Restoring does not connect automatically. Autosave is debounced with the
-injected scheduler and cancelled on dispose. Restored active transactions
-restart their meter loops on the next ready transition; reservations are
-rearmed by the profile.
-
-## Lab controls
-
-`setFaults()` applies drop, malformation, and latency to every outbound frame:
-CALL, CALLRESULT, CALLERROR, raw frames, and queued replays. The order is
-drop, then malformation, then latency. Faults emit `fault` events and
-`[DROP]`, `[MALFORMED]`, or `[LATENCY]` history entries. A dropped CALL stays
-pending until its timeout; a dropped reply is discarded without a retry.
-
-`setValidationMode()` and the `validation.validateOutbound` option run the
-callback for every CALL before it becomes pending or enters the offline queue.
-`warn` emits `validation`, `notice`, and history and continues; `block` rejects
-with `SimulatorValidationError`. Responses are not validated.
-
-`getMetrics()` reports RTT per action, errors in the last minute, and heartbeat
-drift. A `metrics` event follows each RTT, error, heartbeat, and reset, and
-`resetMetrics()` clears the counters. `setInboundResponseMode('reject')`
-returns schema-valid rejections for the status-shaped commands. The package does
-not depend on Ajv or the OCA schemas.
-
-## Errors
-
-`SimulatorError` codes describe local failures (`not-ready`, `timeout`,
-`call-error`, `send-failed`, `invalid-options`, and others).
-`SimulatorCallError` carries the OCPP error code, description, and details.
-Package errors and OCPP wire errors are separate; 1.6 and 2.0.1 error-code sets
-are never merged.
+| Topic                                                                                                         | Covers                                                                           |
+| ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [Engine](https://github.com/ocpptools/ocpptools/blob/main/docs/reference/simulator/engine.md)                 | Factories, injected transport and clock, lifecycle, state, events, errors        |
+| [OCPP 1.6J profile](https://github.com/ocpptools/ocpptools/blob/main/docs/reference/simulator/ocpp-1.6.md)    | Connectors, transactions, charging profiles, configuration, reset                |
+| [OCPP 2.0.1 profile](https://github.com/ocpptools/ocpptools/blob/main/docs/reference/simulator/ocpp-2.0.1.md) | EVSEs, device model, monitoring, reservations, displays, certificates            |
+| [Security integration](https://github.com/ocpptools/ocpptools/blob/main/docs/reference/simulator/security.md) | Opt-in certificate validation, revocation, CSR, firmware verification, ISO 15118 |
+| [Scenarios](https://github.com/ocpptools/ocpptools/blob/main/docs/reference/simulator/scenarios.md)           | Scenario steps, cancellation, results                                            |
+| [Persistence](https://github.com/ocpptools/ocpptools/blob/main/docs/reference/simulator/persistence.md)       | Storage, autosave, snapshots, restore                                            |
+| [Lab controls](https://github.com/ocpptools/ocpptools/blob/main/docs/reference/simulator/lab-controls.md)     | Fault injection, outbound validation, metrics, inbound response modes            |
 
 ## Limits
 
@@ -450,20 +146,35 @@ are never merged.
   sets the URL and subprotocol, so custom headers and mutual TLS require a
   wrapper or subclass that captures the `ws` options you need and is passed as
   the injected constructor.
-- Real cryptography and 15118 ship as opt-in callbacks in 0.4.0 (ADR 0009,
-  ADR 0011, ADR 0012). No X.509, ASN.1, EXI, OCSP or CRL parser is bundled, and
-  there is no firmware flashing or log upload.
+- Real cryptography and ISO 15118 ship as opt-in callbacks (ADR 0009, ADR 0011,
+  ADR 0012). No X.509, ASN.1, EXI, OCSP or CRL parser is bundled, and there is
+  no firmware flashing or log upload.
 - The device-model catalog is curated to four variables (ADR 0008), and OCPP
   2.1.0 is deferred (ADR 0010). Protocol actions and reports ignore variables
   outside the catalog.
 - No hardware model or physical connector tree.
 - The browser and Node adapters use the injected `WebSocket`; they do not retry
-  by themselves. Reconnection belongs to the engine.
+  by themselves. Reconnection belongs to the engine; see the
+  [reconnection policy](https://github.com/ocpptools/ocpptools/blob/main/docs/SIMULATOR-RECONNECTION.md).
 - `storage` is optional and the caller owns persistence policy and secrets such
   as credentials in URLs.
+- No feature claims conformance evidence.
+
+## Related packages
+
+- [`@ocpptools/core`](https://github.com/ocpptools/ocpptools/tree/main/packages/core):
+  the `Transport`, `Clock`, and `Storage` interfaces the simulator uses.
+- [`@ocpptools/testing`](https://github.com/ocpptools/ocpptools/tree/main/packages/testing):
+  mock CSMS, in-memory transport, and fake clock for tests.
+- [`@ocpptools/validator`](https://github.com/ocpptools/ocpptools/tree/main/packages/validator):
+  schema validation for outbound calls.
+- [`ocpptools`](https://github.com/ocpptools/ocpptools/tree/main/packages/cli):
+  runs simulator scenarios from JSON files.
 
 ## License
 
-Apache-2.0. See the repository `LICENSE` and `NOTICE`. The OCA JSON Schemas are
-not part of this package. The project is independent from the Open Charge
-Alliance.
+Apache-2.0. See the repository `LICENSE` and `NOTICE`. The Open Charge
+Alliance's JSON Schemas are not part of this package.
+
+OCPP is a specification of the Open Charge Alliance. This project is not
+affiliated with, endorsed by, or certified by the Open Charge Alliance.

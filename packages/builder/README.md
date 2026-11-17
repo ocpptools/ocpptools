@@ -1,43 +1,37 @@
 # @ocpptools/builder
 
-Headless, schema-driven construction of OCPP-J payloads and frames for OCPP
-1.6J and 2.0.1.
+Headless schema-driven OCPP-J payload and frame builder.
+
+[![npm](https://img.shields.io/npm/v/@ocpptools/builder)](https://www.npmjs.com/package/@ocpptools/builder)
+[![License](https://img.shields.io/npm/l/@ocpptools/builder)](https://github.com/ocpptools/ocpptools/blob/main/LICENSE)
 
 > **Status:** alpha. The API can change in any minor release before 1.0.0.
 
-The package is a small model over a schema registry that you supply. It does
-not contain OCPP schemas, action lists, per-action types, examples, DOM, or
-Tailwind. It never reads files, the network, or ambient time.
+The package is a small model over a schema registry that you supply, for OCPP
+1.6J and 2.0.1. It does not contain OCPP schemas, action lists, per-action
+types, examples, DOM, or Tailwind. It never reads files, the network, or
+ambient time.
 
-OCPP is a specification of the Open Charge Alliance. This project is not
-affiliated with, endorsed by, or certified by the Open Charge Alliance.
+## When to use it
+
+- You build a form, an inspector, or an editor for OCPP messages and need the
+  fields, required values, and defaults of each action.
+- You need to create CALL, CALLRESULT, and CALLERROR frames with a structural
+  check of the payload.
+- For full JSON Schema validation, use
+  [`@ocpptools/validator`](https://github.com/ocpptools/ocpptools/tree/main/packages/validator).
+  A successful build means structurally plausible, not schema-valid.
 
 ## Install
 
-```bash
+```sh
 npm install @ocpptools/builder
 ```
 
-Requires Node.js 22.12 or newer. The package is ESM only and also runs in the
-browser.
+Requires Node.js 22.12 or newer outside the browser. The package is ESM-only
+and also runs in the browser.
 
-## What it does
-
-1. Normalizes draft-04, draft-06, or draft-07 schemas to draft-07.
-2. Resolves local `$ref` values with limits.
-3. Describes the schema as a `Field` tree for a form or an inspector.
-4. Creates the required empty payload and applies defaults.
-5. Checks a payload structurally.
-6. Builds CALL, CALLRESULT, and CALLERROR frames.
-7. Serializes with `@ocpptools/core`.
-
-It does **not** validate JSON Schema completely. Compositions
-(`allOf`, `anyOf`, `oneOf`), `additionalProperties`, `pattern`, `format`,
-`dependencies`, `patternProperties`, `if`/`then`/`else`, and other unlisted
-keywords are not enforced. A successful build means structurally plausible, not
-schema-valid or conformant. Use `@ocpptools/validator` for full validation.
-
-## Build a payload and a frame
+## Quick start
 
 The schema below is synthetic. Your application supplies the real schemas, for
 example from `@ocpptools/schemas` or its own registry.
@@ -56,11 +50,14 @@ const heater = {
   },
 };
 
+const registry = {
+  get: (action: string, kind: 'request' | 'response') =>
+    action === 'Example' && kind === 'request' ? heater : undefined,
+};
+
 const builder = createBuilder({
   version: '2.0.1',
-  schemas: {
-    get: (action, kind) => (action === 'Example' && kind === 'request' ? heater : undefined),
-  },
+  schemas: registry,
   messageIds: () => 'msg-1',
 });
 
@@ -76,7 +73,25 @@ const text = builder.serialize(call.value);
 
 The registry may return a schema or a promise. It may also expose `actions()`;
 the builder never invents an action list. You can pass `actions` in the options
-instead.
+instead. The
+[build-payload example](https://github.com/ocpptools/ocpptools/tree/main/examples/build-payload)
+loads the official schemas from `@ocpptools/schemas`.
+
+## What it does
+
+1. Normalizes draft-04, draft-06, or draft-07 schemas to draft-07.
+2. Resolves local `$ref` values with limits.
+3. Describes the schema as a `Field` tree for a form or an inspector.
+4. Creates the required empty payload and applies defaults.
+5. Checks a payload structurally.
+6. Builds CALL, CALLRESULT, and CALLERROR frames.
+7. Serializes with `@ocpptools/core`.
+
+It does **not** validate JSON Schema completely. Compositions
+(`allOf`, `anyOf`, `oneOf`), `additionalProperties`, `pattern`, `format`,
+`dependencies`, `patternProperties`, `if`/`then`/`else`, and other unlisted
+keywords are not enforced. See [Limits](#limits) for what the structural check
+covers.
 
 ## Describe fields
 
@@ -97,27 +112,19 @@ the builder does not guess.
 
 ## Validate fully
 
+The builder and the validator accept the same structural registry shape
+(`{ get(action, kind) }`), so you can pass a built payload to the validator:
+
 ```ts
-import { createSchemaRegistry, createValidator } from '@ocpptools/validator';
+import { createValidator } from '@ocpptools/validator';
 
-const schemas = createSchemaRegistry({
-  version: '2.0.1',
-  files: ['2.0.1/HeartbeatRequest.json'],
-  load: async (fileName) => {
-    const module = await import(`@ocpptools/schemas/2.0.1/${fileName}`, {
-      with: { type: 'json' },
-    });
-    return module.default;
-  },
-});
-
-const validator = createValidator({ version: '2.0.1', schemas });
-const result = await validator.validatePayload('Heartbeat', 'request', payload.value);
+// `registry` and `payload` come from the quick start above.
+const validator = createValidator({ version: '2.0.1', schemas: registry });
+const result = await validator.validatePayload('Example', 'request', payload.value);
 ```
 
-The builder and the validator accept the same structural registry shape
-(`{ get(action, kind) }`). They are independent packages; the builder does not
-import Ajv or the OCA schemas.
+They are independent packages; the builder does not import Ajv or the OCA
+schemas.
 
 ## API
 
@@ -145,7 +152,8 @@ type BuilderResult<T> =
 ```
 
 `BuilderIssue` has `source`, `code`, `path`, `message`, `expected`, and
-`received`. `received` is truncated to 40 characters.
+`received`. `received` is truncated to 40 characters. The design is recorded in
+[ADR 0013](https://github.com/ocpptools/ocpptools/blob/main/docs/ADR/0013-builder-api.md).
 
 ## Limits
 
@@ -160,13 +168,23 @@ type BuilderResult<T> =
   cycles, `Date`, `Map`, class instances) are rejected.
 - Key material is the caller's responsibility; the builder stores no secrets.
 
-## Legal
+## Related packages
+
+- [`@ocpptools/validator`](https://github.com/ocpptools/ocpptools/tree/main/packages/validator):
+  full schema validation with the same registry shape.
+- [`@ocpptools/schema-utils`](https://github.com/ocpptools/ocpptools/tree/main/packages/schema-utils):
+  the normalization and field metadata the builder uses.
+- [`@ocpptools/schemas`](https://github.com/ocpptools/ocpptools/tree/main/packages/schemas):
+  the official OCPP JSON Schemas, unmodified.
+
+## License
+
+Apache-2.0. See the repository `LICENSE` and `NOTICE`.
 
 The package ships no OCA schema, action list, per-action type, or example. It
 only transforms a schema that the caller supplies in memory. The Open Charge
 Alliance's schemas are available separately in `@ocpptools/schemas` under
 CC BY-ND 4.0.
 
-## License
-
-Apache-2.0. See the repository `LICENSE` and `NOTICE`.
+OCPP is a specification of the Open Charge Alliance. This project is not
+affiliated with, endorsed by, or certified by the Open Charge Alliance.

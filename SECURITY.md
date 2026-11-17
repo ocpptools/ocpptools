@@ -2,14 +2,20 @@
 
 ## Supported versions
 
-This project is in the 0.x foundation phase. Only the latest published minor
-version receives security fixes. Until a package has its first public release,
-no security support is promised.
+All packages are in the 0.x series. Only the latest published minor version of
+each package receives security fixes.
+
+| Package                              | Supported                   |
+| ------------------------------------ | --------------------------- |
+| `@ocpptools/*` and `ocpptools` (CLI) | Latest minor version on npm |
+| Older minor versions                 | No                          |
 
 ## Reporting a vulnerability
 
-Use GitHub Private Vulnerability Reporting for this repository. Do not open a
-public issue, discussion, or pull request for a suspected vulnerability.
+Use
+[GitHub Private Vulnerability Reporting](https://github.com/ocpptools/ocpptools/security/advisories/new)
+for this repository. Do not open a public issue, discussion, or pull request for
+a suspected vulnerability.
 
 Please include:
 
@@ -18,15 +24,21 @@ Please include:
 - A minimal reproduction, with secrets and personal data removed.
 - The impact and any known workaround.
 
-Reports are acknowledged within seven days on a best-effort basis. There is no
-bug bounty at this time.
+## What to expect
+
+- Reports are acknowledged within seven days, on a best-effort basis.
+- The maintainers confirm the issue, agree on a fix and a disclosure date with
+  the reporter, and credit the reporter in the advisory unless they prefer
+  otherwise.
+- There is no bug bounty.
 
 ## Scope
 
 In scope:
 
 - Published packages under the `@ocpptools` npm scope.
-- The `ocpptools` CLI, when published.
+- The `ocpptools` CLI.
+- The release workflow and supply chain of this repository.
 
 Out of scope:
 
@@ -43,6 +55,11 @@ sensitive values. Redact them before submitting.
 
 ## Fixes
 
-Security fixes are released through CI with provenance. A GitHub Security
-Advisory and release notes describe the severity, affected versions, and
+Security fixes are released through CI with npm provenance. A GitHub Security
+Advisory and the release notes describe the severity, affected versions, and
 upgrade path.
+
+The project's security controls are described in
+[docs/SECURITY-BASELINE.md](docs/SECURITY-BASELINE.md). The threat model for the
+simulator's cryptography callbacks is in
+[docs/security/crypto-15118.md](docs/security/crypto-15118.md).

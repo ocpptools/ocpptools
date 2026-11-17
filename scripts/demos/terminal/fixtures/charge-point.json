@@ -1,0 +1,12 @@
+{
+  "version": "2.0.1",
+  "url": "ws://127.0.0.1:9000/CP001",
+  "station": {
+    "id": "CP001",
+    "vendorName": "Acme",
+    "model": "AC-22",
+    "firmwareVersion": "2.0.0",
+    "evseCount": 1,
+    "defaultIdToken": "AABBCCDD"
+  }
+}

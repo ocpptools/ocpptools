@@ -1,19 +1,38 @@
 # @ocpptools/schema-utils
 
-Pure JSON Schema utilities for the OCPP Tools packages: draft normalization,
-`$ref` resolution, field metadata, and payload defaults.
+Pure JSON Schema utilities: draft normalization, $ref resolution, field metadata, and payload defaults.
 
-> **Status:** alpha. This package is published with `validator` in the 0.2.0
-> release and its API can still change. The conventions it follows are in
-> [ADR 0002](https://github.com/ocpptools/ocpptools/blob/main/docs/ADR/0002-schema-utils-conventions.md).
+[![npm](https://img.shields.io/npm/v/@ocpptools/schema-utils)](https://www.npmjs.com/package/@ocpptools/schema-utils)
+[![License](https://img.shields.io/npm/l/@ocpptools/schema-utils)](https://github.com/ocpptools/ocpptools/blob/main/LICENSE)
+
+> **Status:** alpha. The API can change in any minor release before 1.0.0.
 
 It has no runtime dependencies. It does not use the DOM or Node APIs, and it
 never reads files or the network. It does not validate data, it knows nothing
 about OCPP, and it does not include any OCPP JSON Schema. Schemas are plain
-values that you pass in. The Open Charge Alliance's own schemas, unmodified, are
-in [`@ocpptools/schemas`](../schemas/README.md).
+values that you pass in.
 
-## The pipeline
+## When to use it
+
+- You build a tool on top of JSON Schemas written in draft-04, draft-06, or
+  draft-07, such as the OCPP 1.6J (draft-04) and 2.0.1 (draft-06) schemas, and
+  want them in one uniform draft-07 shape.
+- You render a form from a schema and need its fields, required values, and
+  defaults.
+- Most applications do not need it directly: it is the foundation of
+  [`@ocpptools/validator`](https://github.com/ocpptools/ocpptools/tree/main/packages/validator)
+  and
+  [`@ocpptools/builder`](https://github.com/ocpptools/ocpptools/tree/main/packages/builder).
+
+## Install
+
+```sh
+npm install @ocpptools/schema-utils
+```
+
+Requires Node.js 22.12 or newer outside the browser. The package is ESM-only.
+
+## Quick start
 
 Four steps turn a schema, in any of three drafts, into something a form or a
 payload builder can use. Each step takes the output of the previous one.
@@ -59,23 +78,6 @@ root.children?.map((field) => [field.name, field.kind, field.required]);
 createEmptyPayload(schema); // { mode: 'eco' }
 applyDefaults(schema, { target: 21 }); // { ok: true, value: { target: 21, mode: 'eco' } }
 ```
-
-## Functions
-
-| Function                           | Returns                         | Purpose                                                   |
-| ---------------------------------- | ------------------------------- | --------------------------------------------------------- |
-| `detectDraft(schema)`              | `SchemaDraft`                   | Reads the draft from `$schema`.                           |
-| `normalizeSchema(schema, options)` | `Result<NormalizedSchema, ...>` | Converts draft-04 and draft-06 to draft-07.               |
-| `resolveRefs(schema, options)`     | `Result<ResolvedJsonSchema,..>` | Inlines same-document `$ref`.                             |
-| `getFields(schema, options)`       | `Field`                         | Describes a resolved schema as a tree of fields.          |
-| `createEmptyPayload(schema, opts)` | `JsonValue \| undefined`        | Builds the required skeleton of a payload.                |
-| `applyDefaults(schema, value)`     | `Result<JsonValue, ...>`        | Adds the `default` of each property missing from a value. |
-
-Functions that take input from outside (`normalizeSchema`, `resolveRefs`,
-`applyDefaults`) return a result: `{ ok: true, value }` or `{ ok: false, error }`.
-The error has a `kind`, a `message`, and a `path` that is an array of segments
-(a `string` for a property name and a `number` for an array index). No function
-throws.
 
 ## What each step does
 
@@ -159,6 +161,23 @@ are covered by tests.
 6. **Results, not exceptions.** Input that is not JSON, not a schema, or cannot
    be resolved is reported with a `kind`, a `message`, and a `path`.
 
+## API
+
+| Function                           | Returns                         | Purpose                                                   |
+| ---------------------------------- | ------------------------------- | --------------------------------------------------------- |
+| `detectDraft(schema)`              | `SchemaDraft`                   | Reads the draft from `$schema`.                           |
+| `normalizeSchema(schema, options)` | `Result<NormalizedSchema, ...>` | Converts draft-04 and draft-06 to draft-07.               |
+| `resolveRefs(schema, options)`     | `Result<ResolvedJsonSchema,..>` | Inlines same-document `$ref`.                             |
+| `getFields(schema, options)`       | `Field`                         | Describes a resolved schema as a tree of fields.          |
+| `createEmptyPayload(schema, opts)` | `JsonValue \| undefined`        | Builds the required skeleton of a payload.                |
+| `applyDefaults(schema, value)`     | `Result<JsonValue, ...>`        | Adds the `default` of each property missing from a value. |
+
+Functions that take input from outside (`normalizeSchema`, `resolveRefs`,
+`applyDefaults`) return a result: `{ ok: true, value }` or `{ ok: false, error }`.
+The error has a `kind`, a `message`, and a `path` that is an array of segments
+(a `string` for a property name and a `number` for an array index). No function
+throws.
+
 ## Limits
 
 - Only draft-04, draft-06, and draft-07. Newer drafts pass through unchanged.
@@ -168,6 +187,21 @@ are covered by tests.
 - Property names that look like array indexes (`"1"`, `"12"`) come first in
   `getFields`, because JavaScript orders object keys that way.
 
+## Related packages
+
+- [`@ocpptools/schemas`](https://github.com/ocpptools/ocpptools/tree/main/packages/schemas):
+  the Open Charge Alliance's own schemas, unmodified.
+- [`@ocpptools/validator`](https://github.com/ocpptools/ocpptools/tree/main/packages/validator)
+  and
+  [`@ocpptools/builder`](https://github.com/ocpptools/ocpptools/tree/main/packages/builder):
+  rely on the normalized schema contract above.
+
+The conventions this package follows are in
+[ADR 0002](https://github.com/ocpptools/ocpptools/blob/main/docs/ADR/0002-schema-utils-conventions.md).
+
 ## License
 
 Apache-2.0. See the repository `LICENSE` and `NOTICE`.
+
+OCPP is a specification of the Open Charge Alliance. This project is not
+affiliated with, endorsed by, or certified by the Open Charge Alliance.
