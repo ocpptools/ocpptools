@@ -2,8 +2,20 @@ cff-version: 1.2.0
 title: OCPP Tools
 message: If you use this software, please cite it using these metadata.
 type: software
+abstract: >-
+  Validate, build, and simulate OCPP 1.6J and 2.0.1 messages in TypeScript:
+  in the browser, in Node, or in your CI.
 authors:
   - given-names: Rodolfo
     family-names: Carrillo
 repository-code: https://github.com/ocpptools/ocpptools
 license: Apache-2.0
+keywords:
+  - ocpp
+  - ocpp-j
+  - ev-charging
+  - csms
+  - charge-point
+  - simulator
+  - validator
+  - typescript

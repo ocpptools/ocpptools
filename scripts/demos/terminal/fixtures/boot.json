@@ -1,0 +1,6 @@
+[
+  2,
+  "msg-1",
+  "BootNotification",
+  { "reason": "PowerUp", "chargingStation": { "model": "AC-22", "vendorName": "Acme" } }
+]

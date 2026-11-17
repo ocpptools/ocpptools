@@ -1,0 +1,7 @@
+[
+  { "type": "boot" },
+  { "type": "authorize", "idToken": "AABBCCDD" },
+  { "type": "start", "idToken": "AABBCCDD" },
+  { "type": "meter" },
+  { "type": "stop", "reason": "Local" }
+]

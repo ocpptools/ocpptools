@@ -1,22 +1,34 @@
 # @ocpptools/core
 
-OCPP-J frame types, a strict parser and serializer, per-version error codes,
-and the transport, clock, and storage interfaces for OCPP 1.6J and 2.0.1.
+OCPP 1.6J/2.0.1 types, frames, parser/serializer, and transport interfaces.
+
+[![npm](https://img.shields.io/npm/v/@ocpptools/core)](https://www.npmjs.com/package/@ocpptools/core)
+[![License](https://img.shields.io/npm/l/@ocpptools/core)](https://github.com/ocpptools/ocpptools/blob/main/LICENSE)
 
 > **Status:** alpha. The API can change in any minor release before 1.0.0.
 
 It has no runtime dependencies. It does not use the DOM or Node APIs, and it
 does not include OCPP JSON Schemas or validate payloads against them.
 
+## When to use it
+
+- You handle raw OCPP-J text and need a strict parser and serializer that never
+  throw.
+- You need the per-version CALLERROR codes or the shared `Transport`, `Clock`,
+  and `Storage` interfaces.
+- To check payloads against the official schemas, use
+  [`@ocpptools/validator`](https://github.com/ocpptools/ocpptools/tree/main/packages/validator)
+  instead; it builds on this package.
+
 ## Install
 
-Requires Node.js 22.12 or newer. The package is ESM only.
-
-```bash
+```sh
 npm install @ocpptools/core
 ```
 
-## Parse a frame
+Requires Node.js 22.12 or newer outside the browser. The package is ESM-only.
+
+## Quick start
 
 `parseFrame` takes one text frame and returns a result. It never throws.
 
@@ -146,12 +158,29 @@ These are interfaces only. This package ships no implementations.
   synchronous DOM `Storage`.
 
 Code written against them runs in a browser, in Node, and under test.
+Implementations live in `@ocpptools/simulator/browser`,
+`@ocpptools/simulator/node`, and `@ocpptools/testing`.
 
-## API stability
+## API
 
+The full list of exports is in the
+[API inventory](https://github.com/ocpptools/ocpptools/blob/main/docs/API-INVENTORY.md#ocpptoolscore).
 Before 1.0.0, minor releases can contain breaking changes. They are listed in
-the changelog.
+the
+[changelog](https://github.com/ocpptools/ocpptools/blob/main/packages/core/CHANGELOG.md).
+
+## Related packages
+
+- [`@ocpptools/validator`](https://github.com/ocpptools/ocpptools/tree/main/packages/validator):
+  validates payloads against the OCPP JSON Schemas.
+- [`@ocpptools/simulator`](https://github.com/ocpptools/ocpptools/tree/main/packages/simulator):
+  implements `Transport` and `Clock` for the browser and Node.
+- [`@ocpptools/testing`](https://github.com/ocpptools/ocpptools/tree/main/packages/testing):
+  in-memory `Transport` and fake `Clock` for tests.
 
 ## License
 
 Apache-2.0. See the repository `LICENSE` and `NOTICE`.
+
+OCPP is a specification of the Open Charge Alliance. This project is not
+affiliated with, endorsed by, or certified by the Open Charge Alliance.

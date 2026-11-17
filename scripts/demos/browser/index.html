@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>OCPP frame validator</title>
+		<style>
+			:root {
+				--bg: #0f1115;
+				--panel: #171a21;
+				--border: #2a2f3a;
+				--text: #e6e8ee;
+				--muted: #9aa3b2;
+				--accent: #4f8cff;
+				--ok: #2fbf71;
+				--ok-bg: rgba(47, 191, 113, 0.14);
+				--bad: #ff5d5d;
+				--bad-bg: rgba(255, 93, 93, 0.14);
+				--mono: 'Cascadia Mono', 'SF Mono', Consolas, monospace;
+			}
+			* {
+				box-sizing: border-box;
+			}
+			body {
+				margin: 0;
+				background: var(--bg);
+				color: var(--text);
+				font:
+					16px/1.5 'Segoe UI',
+					system-ui,
+					sans-serif;
+			}
+			main {
+				max-width: 1040px;
+				margin: 0 auto;
+				padding: 40px 32px;
+			}
+			h1 {
+				margin: 0 0 4px;
+				font-size: 28px;
+				font-weight: 650;
+			}
+			.lead {
+				margin: 0 0 24px;
+				color: var(--muted);
+			}
+			.lead code {
+				color: var(--text);
+				font-family: var(--mono);
+				font-size: 14px;
+			}
+			.panel {
+				background: var(--panel);
+				border: 1px solid var(--border);
+				border-radius: 12px;
+				padding: 20px;
+			}
+			.toolbar {
+				display: flex;
+				gap: 12px;
+				align-items: center;
+				margin-bottom: 12px;
+			}
+			label {
+				color: var(--muted);
+				font-size: 14px;
+			}
+			select,
+			button {
+				font: inherit;
+				border-radius: 8px;
+				border: 1px solid var(--border);
+				background: #0f1218;
+				color: var(--text);
+				padding: 6px 12px;
+			}
+			button {
+				margin-left: auto;
+				background: var(--accent);
+				border-color: var(--accent);
+				color: #fff;
+				font-weight: 600;
+				padding: 8px 20px;
+				cursor: pointer;
+			}
+			button.secondary {
+				background: transparent;
+				border-color: var(--border);
+				color: var(--muted);
+				font-weight: 500;
+			}
+			button.secondary + button {
+				margin-left: 0;
+			}
+			textarea {
+				width: 100%;
+				height: 120px;
+				resize: none;
+				border-radius: 8px;
+				border: 1px solid var(--border);
+				background: #0b0d12;
+				color: var(--text);
+				font: 17px/1.5 var(--mono);
+				padding: 12px 14px;
+			}
+			textarea:focus {
+				outline: 2px solid var(--accent);
+				outline-offset: -1px;
+			}
+			#result {
+				margin-top: 20px;
+				min-height: 150px;
+			}
+			.status {
+				display: inline-block;
+				font: 600 15px var(--mono);
+				padding: 4px 12px;
+				border-radius: 999px;
+			}
+			.status.valid {
+				color: var(--ok);
+				background: var(--ok-bg);
+			}
+			.status.invalid {
+				color: var(--bad);
+				background: var(--bad-bg);
+			}
+			.summary {
+				margin-left: 10px;
+				color: var(--muted);
+			}
+			table {
+				width: 100%;
+				margin-top: 14px;
+				border-collapse: collapse;
+				font-size: 15px;
+			}
+			th {
+				text-align: left;
+				color: var(--muted);
+				font-weight: 500;
+				border-bottom: 1px solid var(--border);
+				padding: 6px 8px;
+			}
+			td {
+				padding: 8px;
+				border-bottom: 1px solid var(--border);
+				vertical-align: top;
+			}
+			td.mono {
+				font-family: var(--mono);
+				white-space: nowrap;
+			}
+			.placeholder {
+				color: var(--muted);
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<h1>OCPP frame validator</h1>
+			<p class="lead">
+				Runs entirely in the browser with <code>@ocpptools/validator</code> and the official OCPP
+				JSON Schemas from <code>@ocpptools/schemas</code>.
+			</p>
+			<div class="panel">
+				<div class="toolbar">
+					<label for="version">OCPP version</label>
+					<select id="version">
+						<option value="2.0.1" selected>2.0.1</option>
+						<option value="1.6">1.6J</option>
+					</select>
+					<button id="clear" class="secondary" type="button">Clear</button>
+					<button id="validate" type="button">Validate</button>
+				</div>
+				<textarea id="frame" spellcheck="false" placeholder="Paste an OCPP-J frame"></textarea>
+				<div id="result"><span class="placeholder">The result appears here.</span></div>
+			</div>
+		</main>
+		<script type="module" src="app.js"></script>
+	</body>
+</html>

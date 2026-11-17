@@ -2,38 +2,35 @@
 
 Test doubles and deterministic helpers for OCPP 1.6J and 2.0.1.
 
-> **Status:** alpha. APIs may change in any minor release before 1.0.0. See
-> [ADR 0014](https://github.com/ocpptools/ocpptools/blob/main/docs/ADR/0014-testing-utilities.md)
-> and [ADR 0015](https://github.com/ocpptools/ocpptools/blob/main/docs/ADR/0015-testing-publication-override.md).
+[![npm](https://img.shields.io/npm/v/@ocpptools/testing)](https://www.npmjs.com/package/@ocpptools/testing)
+[![License](https://img.shields.io/npm/l/@ocpptools/testing)](https://github.com/ocpptools/ocpptools/blob/main/LICENSE)
 
-## Install
+> **Status:** alpha. The API can change in any minor release before 1.0.0.
 
-```bash
-npm install @ocpptools/testing
-```
-
-Requires Node.js 22.12 or newer. The package is ESM-only and also runs in the
-browser.
+![Vitest runs two tests that use the mock CSMS and the in-memory transport of @ocpptools/testing; both pass in milliseconds.](https://raw.githubusercontent.com/ocpptools/ocpptools/main/docs/assets/testing-vitest.gif)
 
 The package provides a protocol-level mock CSMS, an in-memory transport, frame
 factories, synthetic fixtures, and a deterministic fake clock. It is a test
 utility, not a complete CSMS, a charge point, or a conformance tool.
 
-OCPP is a specification of the Open Charge Alliance. This project is not
-affiliated with, endorsed by, or certified by the Open Charge Alliance.
+## When to use it
 
-## What it does
+- You test a charging station client, a CSMS, or the simulator and want
+  deterministic tests without sockets, a network, or real timers.
+- You need OCPP-J frames with predictable message IDs, or invalid frames to test
+  error handling.
+- To simulate a full charging station, use
+  [`@ocpptools/simulator`](https://github.com/ocpptools/ocpptools/tree/main/packages/simulator)
+  together with this package.
 
-- Connects a client and a server through the `Transport` contract from
-  `@ocpptools/core`, without sockets or a network.
-- Acts as a transport-agnostic mock CSMS for tests.
-- Builds CALL, CALLRESULT, and CALLERROR frames with deterministic IDs.
-- Provides synthetic fixtures, including invalid frames.
-- Provides a deterministic fake clock and microtask flushing.
-- Works in browsers and Node 22.12+ from the same root entry.
+## Install
 
-It does **not** include OCA schemas, action lists, per-action types, default OCPP
-responses, Ajv, `ws`, DOM, Node built-ins, or a full CSMS state machine.
+```sh
+npm install @ocpptools/testing --save-dev
+```
+
+Requires Node.js 22.12 or newer outside the browser. The package is ESM-only
+and also runs in the browser.
 
 ## Quick start
 
@@ -63,6 +60,22 @@ await pair.link.flush();
 
 console.log(csms.calls, csms.results);
 ```
+
+The [testing guide](https://github.com/ocpptools/ocpptools/blob/main/docs/guides/test-without-a-network.md)
+shows complete tests with the simulator, a fake clock, and network failures.
+
+## What it does
+
+- Connects a client and a server through the `Transport` contract from
+  `@ocpptools/core`, without sockets or a network.
+- Acts as a transport-agnostic mock CSMS for tests.
+- Builds CALL, CALLRESULT, and CALLERROR frames with deterministic IDs.
+- Provides synthetic fixtures, including invalid frames.
+- Provides a deterministic fake clock and microtask flushing.
+- Works in browsers and Node.js 22.12 or newer from the same root entry.
+
+It does **not** include the Open Charge Alliance's schemas, action lists, per-action types, default OCPP
+responses, Ajv, `ws`, DOM, Node built-ins, or a full CSMS state machine.
 
 ## In-memory transport
 
@@ -119,9 +132,10 @@ handler, `await csms.waitForIdle()` waits for every in-flight handler, validator
 and response.
 
 Malformed frames are recorded in `issues`. With `replyToInvalidFrames: true`,
-the mock answers malformed CALLs with the version-specific error code. Unknown
-message types are ignored in every version, following OCPP 2.0.1 Errata
-2026-09. The mock never answers a CALLRESULT or CALLERROR with a CALLERROR. A
+the mock answers malformed CALLs with the version-specific error code. From
+0.1.2, unknown message types are ignored in every version, following OCPP 2.0.1
+Errata 2026-09; 0.1.1 still answers them with `MessageTypeNotSupported`. The mock
+never answers a CALLRESULT or CALLERROR with a CALLERROR. A
 malformed response with a matching pending ID rejects the server-initiated call
 instead of leaving it hanging.
 
@@ -179,7 +193,12 @@ These limits are intentionally conservative for tests. If you need a larger
 value, add a consumer requirement and a new decision rather than bypassing the
 guard.
 
-## Integration
+## Related packages
+
+- [`@ocpptools/core`](https://github.com/ocpptools/ocpptools/tree/main/packages/core):
+  the `Transport` and `Clock` contracts this package implements.
+- [`@ocpptools/simulator`](https://github.com/ocpptools/ocpptools/tree/main/packages/simulator):
+  a charging station to connect to the mock CSMS.
 
 `@ocpptools/simulator`, `@ocpptools/validator`, and `@ocpptools/schemas` are
 devDependencies of this package. The integration tests use them at runtime; none
@@ -188,13 +207,19 @@ is a dependency of the published tarball. See
 for a 1.6J and 2.0.1 flow over the in-memory transport. Real action names and
 minimal payloads in that test are hand-written test data, not packaged fixtures.
 
-## Legal
+The decision to publish this package is recorded in
+[ADR 0014](https://github.com/ocpptools/ocpptools/blob/main/docs/ADR/0014-testing-utilities.md)
+and
+[ADR 0015](https://github.com/ocpptools/ocpptools/blob/main/docs/ADR/0015-testing-publication-override.md).
+
+## License
+
+Apache-2.0. See the repository `LICENSE` and `NOTICE`.
 
 The package ships no OCA schema, schema copy, action list, per-action type, or
 default response. Error codes come from `@ocpptools/core`; the 1.6J and 2.0.1
 sets are not merged. The package is Apache-2.0 only and does not include
 `LICENSE-CC-BY-ND-4.0.txt`.
 
-## License
-
-Apache-2.0. See the repository `LICENSE` and `NOTICE`.
+OCPP is a specification of the Open Charge Alliance. This project is not
+affiliated with, endorsed by, or certified by the Open Charge Alliance.

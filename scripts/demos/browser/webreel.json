@@ -1,0 +1,39 @@
+{
+  "$schema": "https://webreel.dev/schema/v1.json",
+  "outDir": "videos/",
+  "viewport": { "width": 1200, "height": 660 },
+  "defaultDelay": 250,
+  "clickDwell": 250,
+  "videos": {
+    "browser-validator": {
+      "url": "http://127.0.0.1:4173/",
+      "waitFor": "#frame",
+      "output": "browser-validator.mp4",
+      "fps": 30,
+      "quality": 90,
+      "thumbnail": { "enabled": false },
+      "steps": [
+        { "action": "pause", "ms": 800 },
+        {
+          "action": "type",
+          "selector": "#frame",
+          "text": "[2,\"msg-1\",\"Heartbeat\",{}]",
+          "charDelay": 55
+        },
+        { "action": "click", "text": "Validate", "within": ".toolbar" },
+        { "action": "wait", "selector": ".status.valid", "timeout": 10000 },
+        { "action": "pause", "ms": 1600 },
+        { "action": "click", "text": "Clear", "within": ".toolbar" },
+        {
+          "action": "type",
+          "selector": "#frame",
+          "text": "[2,\"msg-2\",\"BootNotification\",{\"reason\":\"PowerUp\",\"chargingStation\":{\"model\":\"AC-22\"}}]",
+          "charDelay": 32
+        },
+        { "action": "click", "text": "Validate", "within": ".toolbar" },
+        { "action": "wait", "text": "is required", "timeout": 10000 },
+        { "action": "pause", "ms": 3500 }
+      ]
+    }
+  }
+}

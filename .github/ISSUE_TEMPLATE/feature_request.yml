@@ -5,22 +5,46 @@ body:
   - type: markdown
     attributes:
       value: |
-        Check the roadmap first. Hosted services, UI components, and OCPP
-        schema distribution are out of scope.
+        Check the roadmap and its non-goals first. Hosted services, UI
+        components, and edited copies of the OCPP schemas are out of scope.
+        For open-ended ideas, start a discussion instead.
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package
+      options:
+        - '@ocpptools/core'
+        - '@ocpptools/schema-utils'
+        - '@ocpptools/validator'
+        - '@ocpptools/simulator'
+        - '@ocpptools/builder'
+        - '@ocpptools/testing'
+        - '@ocpptools/schemas'
+        - 'ocpptools (CLI)'
+        - New package or not sure
+    validations:
+      required: true
   - type: textarea
     id: problem
     attributes:
       label: Problem
-      description: What are you trying to do that you cannot do today?
+      description: What are you trying to do that you cannot do today? Describe your use case.
     validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
       label: Proposed solution
+      description: The API, option, or behavior you would like. A short code sample helps.
     validations:
       required: true
   - type: textarea
     id: alternatives
     attributes:
       label: Alternatives considered
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I would like to open a pull request for this.
