@@ -1,5 +1,11 @@
 # ocpptools
 
+## 0.2.0
+
+### Minor Changes
+
+- 9583e4d: Add `--no-schema` to `ocpptools validate`. It skips the OCA payload schemas but still checks the JSON, the frame shape, and the CALLERROR code for the selected version. This is the contingency path if the schema package must be withdrawn.
+
 ## 0.1.1
 
 ### Patch Changes
