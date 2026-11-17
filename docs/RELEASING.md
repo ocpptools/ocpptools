@@ -15,12 +15,15 @@ publisher is configured and a recent OIDC release is recorded.
 | ------------------------- | --------------------- | ----------------- | --------------- | --------------- | ------------------ |
 | `@ocpptools/core`         | 0.3.1                 | owner to verify   | `npm publish`   | 0.3.1           | no longer injected |
 | `@ocpptools/schema-utils` | 0.3.1                 | owner to verify   | `npm publish`   | 0.3.1           | no longer injected |
-| `@ocpptools/validator`    | 0.3.0 (0.3.1 staged)  | owner to verify   | `npm publish`   | 0.3.1 staged    | no longer injected |
+| `@ocpptools/validator`    | 0.3.1                 | owner to verify   | `npm publish`   | 0.3.1           | no longer injected |
 | `@ocpptools/simulator`    | 0.4.1                 | owner to verify   | `npm publish`   | 0.4.1           | no longer injected |
 | `@ocpptools/builder`      | 0.1.0                 | owner to verify   | `npm publish`   | owner to verify | no longer injected |
 | `@ocpptools/schemas`      | 0.1.0                 | owner to verify   | `npm publish`   | owner to verify | no longer injected |
-| `ocpptools`               | 0.1.1                 | owner to verify   | `npm publish`   | owner to verify | no longer injected |
-| `@ocpptools/testing`      | 0.1.1 (0.1.2 blocked) | review required   | `npm publish`   | 0.1.1           | no longer injected |
+| `ocpptools`               | 0.1.1 (0.2.0 pending) | owner to verify   | `npm publish`   | owner to verify | no longer injected |
+| `@ocpptools/testing`      | 0.1.1 (0.1.2 pending) | reconfigured      | `npm publish`   | 0.1.1           | no longer injected |
+
+`ocpptools` is unscoped, so npm lists it under the publishing user account, not
+under the `@ocpptools` organization.
 
 ## Configure a trusted publisher
 
@@ -142,26 +145,37 @@ it is split, follow these rules:
 
 ## Partial release 2026-11-11
 
-The 2026-11-11 release published `@ocpptools/core@0.3.1`,
-`@ocpptools/schema-utils@0.3.1`, and `@ocpptools/simulator@0.4.1` with
-provenance. Two packages did not finish:
+Two runs of the Release workflow on 2026-11-11 failed part way:
 
-- `@ocpptools/validator@0.3.1` is staged, not live (`latest` is still 0.3.0).
-  The tag and GitHub Release exist. The owner should run
-  `npm stage list @ocpptools/validator`, approve `0.3.1`, and verify that
-  `latest` moves. Do not move the tag.
-- `@ocpptools/simulator@0.4.1` is live. A later retry reported a staged 0.4.1
-  entry; if `npm stage list @ocpptools/simulator` shows one, reject the
-  duplicate. Do not publish over the live version.
-- `@ocpptools/testing@0.1.2` failed with `E404` on `PUT`. The trusted publisher
-  for this package needs review: confirm the package name, repository,
-  workflow, environment, and that the allowed action is `npm publish` rather
-  than `npm stage publish`. `0.1.1` remains `latest` until then.
+- The first run published `@ocpptools/core@0.3.1`,
+  `@ocpptools/schema-utils@0.3.1`, `@ocpptools/simulator@0.4.1`, and
+  `@ocpptools/validator@0.3.1`, and created their tags and GitHub Releases.
+  `@ocpptools/testing@0.1.2` failed with `E404` on `PUT`.
+- The retry did not see the staged versions in the registry and tried to
+  publish them again: `simulator` and `validator` failed with `E409` ("Cannot publish over
+  previously staged version"), and `testing` failed with `E404` again.
 
-Do not rerun the release workflow until the staged entries and the testing
-trusted publisher are resolved. A rerun now fails with `E409` for the staged
-versions and `E404` for testing. Once fixed, Changesets publishes only the
-missing version and does not move tags.
+The staged entries mean the trusted publisher of those packages allowed
+`npm stage publish`. Changesets does not support staged publishing.
+
+State on 2026-11-17:
+
+- `@ocpptools/validator@0.3.1` was approved from staging and is `latest`, with
+  provenance.
+- `@ocpptools/simulator@0.4.1` is `latest`. If
+  `npm stage list @ocpptools/simulator` still shows a staged 0.4.1 entry,
+  reject it. Do not publish over the live version.
+- The trusted publisher of `@ocpptools/testing` was reconfigured. `0.1.2` is
+  still unpublished; `0.1.1` is `latest`.
+- The [version pull request](https://github.com/ocpptools/ocpptools/pull/109)
+  bumped `ocpptools` to 0.2.0.
+
+The next Release run publishes only the versions missing from npm,
+`ocpptools@0.2.0` and `@ocpptools/testing@0.1.2`, and does not move existing
+tags. Before you approve the `release` environment, confirm that the trusted
+publishers of both packages allow `npm publish`. After the run, verify both
+versions as described in [Verify a release](#verify-a-release) and update the
+inventory table.
 
 ## Partial release or failure
 
